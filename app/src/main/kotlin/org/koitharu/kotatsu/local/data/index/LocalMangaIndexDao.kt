@@ -3,9 +3,13 @@ package org.koitharu.kotatsu.local.data.index
 import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Upsert
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface LocalMangaIndexDao {
+
+	@Query("SELECT manga_id FROM local_index")
+	fun observeAllMangaIds(): Flow<List<Long>>
 
 	@Query("SELECT path FROM local_index WHERE manga_id = :mangaId")
 	suspend fun findPath(mangaId: Long): String?

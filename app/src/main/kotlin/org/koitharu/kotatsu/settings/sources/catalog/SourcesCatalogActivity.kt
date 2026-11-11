@@ -112,6 +112,13 @@ class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
 	private val isAutoMigrate by lazy(LazyThreadSafetyMode.NONE) {
 		intent?.getBooleanExtra(AppRouter.KEY_SOURCE_CATALOG_AUTO_MIGRATE, false) == true
 	}
+	private val isAutoUpdateAll by lazy(LazyThreadSafetyMode.NONE) {
+		intent?.getBooleanExtra(AppRouter.KEY_SOURCE_CATALOG_AUTO_UPDATE_ALL, false) == true
+	}
+	private var hasTriggeredAutoUpdateAll = false
+	private var isStartingBatchUpdate = false
+	private val batchUpdatingPackages = HashSet<String>()
+	private var batchSucceededCount = 0
 	private var isScrollToTopShown = false
 	private val pendingInstallQueue = ArrayDeque<SourcesCatalogViewModel.InstallRequest>()
 	private val pendingDownloadedInstalls = ArrayDeque<Long>()
@@ -183,7 +190,7 @@ class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
 			listener = object : SourcesCatalogPagesAdapter.Listener {
 				override fun onRefresh() = viewModel.refresh()
 				override fun onPageScrolled() = updateScrollToTopVisibility()
-				override fun onUpdateAll() = viewModel.updateAllExtensions()
+				override fun onUpdateAll() = startBatchUpdateAll()
 			},
 		)
 		viewBinding.pager.adapter = pagesAdapter
@@ -231,7 +238,10 @@ class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
 			// No menu item depends on this. Invalidating here rebuilt the menu whenever a search
 			// filtered the update rows away, which destroyed the expanded SearchView mid-typing.
 			if (hasUpdates) {
-				if (settings.isPrivateInstallEnabled) {
+				if (isAutoUpdateAll && !hasTriggeredAutoUpdateAll) {
+					hasTriggeredAutoUpdateAll = true
+					startBatchUpdateAll()
+				} else if (settings.isPrivateInstallEnabled) {
 					lifecycleScope.launch { extensionUpdateScheduler.startNow() }
 				} else if (
 					settings.isShizukuInstallerEnabled &&
@@ -245,6 +255,15 @@ class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
 			pagesAdapter.setRefreshing(it)
 		}
 		viewModel.onOpenPackageInstaller.observeEvent(this) { requests ->
+			if (isStartingBatchUpdate) {
+				isStartingBatchUpdate = false
+				batchUpdatingPackages.clear()
+				batchSucceededCount = 0
+				requests.mapTo(batchUpdatingPackages) { it.packageName }
+				if (batchUpdatingPackages.isNotEmpty()) {
+					showCapsuleToast(R.string.extensions_updating_all_toast, Snackbar.LENGTH_SHORT)
+				}
+			}
 			for (request in requests) {
 				confirmAndEnqueueInstall(request)
 			}
@@ -276,13 +295,16 @@ class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
 			}
 		}
 		viewModel.onShowMessage.observeEvent(this) { msg ->
-			Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+			isStartingBatchUpdate = false
+			showCapsuleToast(msg, Snackbar.LENGTH_LONG)
 		}
 		viewModel.onExtensionInstalled.observeEvent(this) { sourceName ->
-			val source = MangaSource(sourceName)
-			Snackbar.make(viewBinding.pager, R.string.extension_installed, Snackbar.LENGTH_LONG)
-				.setAction(R.string.action_open) { router.openList(source, null, null) }
-				.show()
+			if (batchUpdatingPackages.isEmpty()) {
+				val source = MangaSource(sourceName)
+				Snackbar.make(viewBinding.pager, R.string.extension_installed, Snackbar.LENGTH_LONG)
+					.setAction(R.string.action_open) { router.openList(source, null, null) }
+					.show()
+			}
 		}
 		combine(
 			viewModel.appliedFilter,
@@ -363,7 +385,33 @@ class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
 
 	override fun onListHeaderClick(item: ListHeader, view: View) {
 		if (item.buttonTextRes == R.string.update_all) {
-			viewModel.updateAllExtensions()
+			startBatchUpdateAll()
+		}
+	}
+
+	private fun startBatchUpdateAll() {
+		isStartingBatchUpdate = true
+		viewModel.updateAllExtensions()
+	}
+
+	private fun showCapsuleToast(messageRes: Int, duration: Int = Snackbar.LENGTH_SHORT) {
+		if (::pagesAdapter.isInitialized) {
+			Snackbar.make(viewBinding.pager, messageRes, duration).show()
+		} else {
+			Toast.makeText(this, messageRes, Toast.LENGTH_SHORT).show()
+		}
+	}
+
+	private fun onBatchPackageFinished(packageName: String?, succeeded: Boolean) {
+		if (packageName == null || batchUpdatingPackages.isEmpty()) return
+		if (batchUpdatingPackages.remove(packageName)) {
+			if (succeeded) {
+				batchSucceededCount++
+			}
+			if (batchUpdatingPackages.isEmpty() && batchSucceededCount > 0) {
+				batchSucceededCount = 0
+				showCapsuleToast(R.string.extensions_updated_toast, Snackbar.LENGTH_LONG)
+			}
 		}
 	}
 
@@ -576,7 +624,9 @@ class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
 			mode = requestModel.mode,
 			isProviderReplacement = requestModel.replacement != null,
 		)
-		Toast.makeText(this, R.string.download_started, Toast.LENGTH_SHORT).show()
+		if (requestModel.packageName !in batchUpdatingPackages) {
+			showCapsuleToast(R.string.download_started, Snackbar.LENGTH_SHORT)
+		}
 		// Download via the app's OkHttp client so proxy/DoH/SSL settings apply,
 		// unlike the system DownloadManager which ignores them
 		lifecycleScope.launch {
@@ -589,15 +639,19 @@ class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
 				pendingDownloadedInstalls += downloadId
 				processDownloadedInstallerQueue()
 			} else {
-				viewModel.clearExtensionInProgress(downloadRequestsById.remove(downloadId)?.packageName)
-				Toast.makeText(this@SourcesCatalogActivity, R.string.extension_download_failed, Toast.LENGTH_LONG).show()
+				val failedPkg = downloadRequestsById.remove(downloadId)?.packageName
+				viewModel.clearExtensionInProgress(failedPkg)
+				onBatchPackageFinished(failedPkg, succeeded = false)
+				showCapsuleToast(R.string.extension_download_failed, Snackbar.LENGTH_LONG)
 			}
 		}
 		processInstallQueue()
 	}
 
 	private fun installNovelPlugin(requestModel: SourcesCatalogViewModel.InstallRequest) {
-		Toast.makeText(this, R.string.download_started, Toast.LENGTH_SHORT).show()
+		if (requestModel.packageName !in batchUpdatingPackages) {
+			showCapsuleToast(R.string.download_started, Snackbar.LENGTH_SHORT)
+		}
 		lifecycleScope.launch {
 			val result = runCatching {
 				val code = withContext(Dispatchers.IO) { downloadText(requestModel.url) }
@@ -612,12 +666,16 @@ class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
 			viewModel.clearExtensionInProgress(requestModel.packageName)
 			if (result.isSuccess) {
 				viewModel.onPrivateExtensionChanged()
-				viewModel.notifyExtensionInstalled(requestModel.packageName)
+				if (requestModel.packageName !in batchUpdatingPackages) {
+					viewModel.notifyExtensionInstalled(requestModel.packageName)
+				}
+				onBatchPackageFinished(requestModel.packageName, succeeded = true)
 				// Plugins update themselves in the background, but with no APK-installer setting turned
 				// on the periodic check may never have been scheduled — the first plugin enables it.
 				extensionUpdateScheduler.schedule()
 			} else {
-				Toast.makeText(this@SourcesCatalogActivity, R.string.extension_download_failed, Toast.LENGTH_LONG).show()
+				onBatchPackageFinished(requestModel.packageName, succeeded = false)
+				showCapsuleToast(R.string.extension_download_failed, Snackbar.LENGTH_LONG)
 			}
 		}
 		processInstallQueue()
@@ -669,7 +727,8 @@ class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
 		) {
 			viewModel.clearExtensionInProgress(pendingDownload?.packageName)
 			removeDownloadedApk(pendingDownload?.fileName)
-			Toast.makeText(this, R.string.shizuku_invalid_package, Toast.LENGTH_LONG).show()
+			onBatchPackageFinished(pendingDownload?.packageName, succeeded = false)
+			showCapsuleToast(R.string.shizuku_invalid_package, Snackbar.LENGTH_LONG)
 			processDownloadedInstallerQueue()
 			return
 		}
@@ -921,8 +980,11 @@ class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
 			storeManager.setOwner(activeInstallerMode!!, packageName, activeInstallerStoreId!!)
 		}
 		if (installSucceeded && packageName != null) {
-			viewModel.notifyExtensionInstalled(packageName)
+			if (packageName !in batchUpdatingPackages) {
+				viewModel.notifyExtensionInstalled(packageName)
+			}
 		}
+		onBatchPackageFinished(packageName, succeeded = installSucceeded)
 		removeDownloadedApk(activeInstallerFileName)
 		if (isCurrentInstaller) {
 			activeInstallerPackage = null

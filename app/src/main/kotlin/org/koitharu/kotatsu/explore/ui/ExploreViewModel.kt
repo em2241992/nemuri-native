@@ -36,6 +36,7 @@ import org.koitharu.kotatsu.explore.ui.model.ExploreButtons
 import org.koitharu.kotatsu.explore.ui.model.MangaSourceItem
 import org.koitharu.kotatsu.explore.ui.model.ExploreSources
 import org.koitharu.kotatsu.explore.ui.model.RecommendationsItem
+import org.koitharu.kotatsu.extensions.install.ExtensionUpdateWorker
 import org.koitharu.kotatsu.list.ui.model.EmptyState
 import org.koitharu.kotatsu.list.ui.model.ListHeader
 import org.koitharu.kotatsu.list.ui.model.ListModel
@@ -57,6 +58,7 @@ class ExploreViewModel @Inject constructor(
 	private val sourcesRepository: MangaSourcesRepository,
 	private val shortcutManager: AppShortcutManager,
 	private val extensionStoreManager: ExtensionStoreManager,
+	private val extensionUpdateScheduler: ExtensionUpdateWorker.Scheduler,
 	private val suggestionsScheduler: SuggestionsWorker.Scheduler,
 ) : BaseViewModel() {
 
@@ -79,6 +81,8 @@ class ExploreViewModel @Inject constructor(
 
 	val hasExtensionUpdates: StateFlow<Boolean> = extensionStoreManager.hasUpdates
 		.stateIn(viewModelScope + Dispatchers.IO, SharingStarted.Eagerly, false)
+
+	private val isWaitingForExtensionBatchToast = java.util.concurrent.atomic.AtomicBoolean(false)
 
 	/** True while a pull-to-refresh is regenerating the suggestions. */
 	private val isRefreshingSuggestions = MutableStateFlow(false)
@@ -121,6 +125,25 @@ class ExploreViewModel @Inject constructor(
 			if (!settings.isSuggestionsEnabled && settings.isTipEnabled(TIP_SUGGESTIONS)) {
 				onShowSuggestionsTip.call(Unit)
 			}
+		}
+		launchJob(Dispatchers.Default) {
+			hasExtensionUpdates.collect { hasUpdates ->
+				if (!hasUpdates && isWaitingForExtensionBatchToast.compareAndSet(true, false)) {
+					onActionDone.call(ReversibleAction(R.string.extensions_updated_toast, null))
+				}
+			}
+		}
+	}
+
+	fun triggerUpdateAllExtensions(onRequireInteractiveCatalog: () -> Unit) {
+		if (settings.isPrivateInstallEnabled || settings.isShizukuInstallerEnabled) {
+			isWaitingForExtensionBatchToast.set(true)
+			onActionDone.call(ReversibleAction(R.string.extensions_updating_all_toast, null))
+			launchJob(Dispatchers.IO) {
+				extensionUpdateScheduler.startNow()
+			}
+		} else {
+			onRequireInteractiveCatalog()
 		}
 	}
 
@@ -211,18 +234,20 @@ class ExploreViewModel @Inject constructor(
 		isGrid,
 		sourcesRepository.observeHasMultiLanguageSources(),
 		settings.observeAsFlow(AppSettings.KEY_TIPS_CLOSED) { isTipEnabled(TIP_LANGUAGES) },
+		hasExtensionUpdates,
 	) { args ->
 		val allSources = args[0] as List<MangaSourceInfo>
 		val isExtensionsLoading = args[1] as Boolean
 		val isGrid = args[2] as Boolean
 		val hasMultiLanguageSources = args[3] as Boolean
 		val isLanguageTipEnabled = args[4] as Boolean
+		val hasUpdates = args[5] as Boolean
 		ExploreSources(
 			manga = buildSourcesPage(
-				allSources, isExtensionsLoading, isGrid, hasMultiLanguageSources, isLanguageTipEnabled, false,
+				allSources, isExtensionsLoading, isGrid, hasMultiLanguageSources, isLanguageTipEnabled, false, hasUpdates,
 			),
 			novel = buildSourcesPage(
-				allSources, isExtensionsLoading, isGrid, hasMultiLanguageSources, isLanguageTipEnabled, true,
+				allSources, isExtensionsLoading, isGrid, hasMultiLanguageSources, isLanguageTipEnabled, true, hasUpdates,
 			),
 		)
 	}.withErrorHandling()
@@ -234,8 +259,12 @@ class ExploreViewModel @Inject constructor(
 		hasMultiLanguageSources: Boolean,
 		isLanguageTipEnabled: Boolean,
 		isNovelShown: Boolean,
+		hasUpdates: Boolean,
 	): List<ListModel> {
-		val result = ArrayList<ListModel>(sources.size + 2)
+		val result = ArrayList<ListModel>(sources.size + 3)
+		if (hasUpdates && !isNovelShown) {
+			result += ListHeader(R.string.updates_pending, R.string.update_all, R.id.action_update)
+		}
 		val shown = sources.filter { it.isNovelSource == isNovelShown }
 		when {
 			shown.isNotEmpty() -> shown.mapTo(result) { MangaSourceItem(it, isGrid) }

@@ -319,10 +319,14 @@ class ExploreFragment :
 	}
 
 	override fun onListHeaderClick(item: ListHeader, view: View) {
-		if (item.payload == R.id.nav_suggestions) {
-			router.openSuggestions()
-		} else {
-			router.openSourcesCatalog(isExternalOnly = true)
+		when {
+			item.payload == R.id.nav_suggestions -> router.openSuggestions()
+			item.buttonTextRes == R.string.update_all -> {
+				viewModel.triggerUpdateAllExtensions {
+					router.openSourcesCatalog(isExternalOnly = true, autoUpdateAll = true)
+				}
+			}
+			else -> router.openSourcesCatalog(isExternalOnly = true)
 		}
 	}
 
