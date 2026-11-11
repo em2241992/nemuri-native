@@ -1303,4 +1303,25 @@
     <string name="enhance_open_migration">Open Migration Assistant</string>
     <string name="enhance_open_reader_settings">Reader Engine Settings</string>
     <string name="enhance_open_extensions">Manage Extensions</string>
+    <string name="merge_sources">Merge sources</string>
+    <string name="merged_sources">Merged sources</string>
+    <string name="merge_action">Merge</string>
+    <string name="merge_count_badge">%1$d Merged</string>
+    <string name="merge_sources_subtitle">Unify chapters across installed sources, fill missing chapter gaps, and enable silent reader failover.</string>
+    <string name="merge_primary_source_label">Primary source • Priority #1</string>
+    <string name="merge_linked_sources_header">Linked backup &amp; gap-fill sources (%1$d)</string>
+    <string name="merge_no_linked_sources">No secondary sources linked yet. Search below to merge chapters from another source.</string>
+    <string name="merge_search_sources_header">Search &amp; link sources</string>
+    <string name="merge_search_hint">Search across enabled sources…</string>
+    <string name="merge_all_enabled_sources">All enabled sources</string>
+    <string name="merge_link_button">Link</string>
+    <string name="merge_linked_button">Linked</string>
+    <string name="merge_unlink_button">Unlink</string>
+    <string name="merge_move_priority_up">Move priority up</string>
+    <string name="merge_move_priority_down">Move priority down</string>
+    <string name="merge_source_linked_toast">Merged source linked: %1$s</string>
+    <string name="merge_source_unlinked_toast">Merged source unlinked</string>
+    <string name="merge_no_enabled_sources">No compatible enabled sources found. Enable extensions in Explore or Extensions first.</string>
+    <string name="merge_no_search_results">No matching series found for \"%1$s\".</string>
+    <string name="switched_to_backup_source">Switched to backup source: %1$s</string>
 </resources>

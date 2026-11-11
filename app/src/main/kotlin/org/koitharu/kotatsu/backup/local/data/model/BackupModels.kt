@@ -17,6 +17,7 @@ import org.koitharu.kotatsu.history.data.HistoryWithManga
 import org.koitharu.kotatsu.scrobbling.common.data.ScrobblingEntity
 import org.koitharu.kotatsu.stats.data.StatsEntity
 import org.koitharu.kotatsu.core.db.entity.MangaPrefsEntity
+import org.koitharu.kotatsu.core.db.entity.MergedMangaEntity
 import org.koitharu.kotatsu.tracker.data.TrackEntity
 import org.koitharu.kotatsu.tracker.data.TrackLogEntity
 
@@ -563,6 +564,50 @@ class SourceSettingsBackup(
 	@SerialName("source") val source: String,
 	@SerialName("values") val values: Map<String, BackupPrimitive>,
 )
+
+@Serializable
+class MergedMangaBackup(
+	@SerialName("primary_manga") val primaryManga: MangaBackup,
+	@SerialName("secondary_manga") val secondaryManga: MangaBackup? = null,
+	@SerialName("primary_manga_id") val primaryMangaId: Long,
+	@SerialName("merged_source_name") val mergedSourceName: String,
+	@SerialName("merged_manga_id") val mergedMangaId: Long,
+	@SerialName("merged_manga_url") val mergedMangaUrl: String,
+	@SerialName("merged_title") val mergedTitle: String,
+	@SerialName("merged_cover_url") val mergedCoverUrl: String,
+	@SerialName("priority_order") val priorityOrder: Int = 0,
+	@SerialName("enabled") val enabled: Boolean = true,
+) {
+
+	constructor(
+		entity: MergedMangaEntity,
+		primaryManga: MangaBackup,
+		secondaryManga: MangaBackup? = null,
+	) : this(
+		primaryManga = primaryManga,
+		secondaryManga = secondaryManga,
+		primaryMangaId = entity.primaryMangaId,
+		mergedSourceName = entity.mergedSourceName,
+		mergedMangaId = entity.mergedMangaId,
+		mergedMangaUrl = entity.mergedMangaUrl,
+		mergedTitle = entity.mergedTitle,
+		mergedCoverUrl = entity.mergedCoverUrl,
+		priorityOrder = entity.priorityOrder,
+		enabled = entity.enabled,
+	)
+
+	fun toEntity(existingId: Long = 0L) = MergedMangaEntity(
+		id = existingId,
+		primaryMangaId = primaryMangaId,
+		mergedSourceName = mergedSourceName,
+		mergedMangaId = mergedMangaId,
+		mergedMangaUrl = mergedMangaUrl,
+		mergedTitle = mergedTitle,
+		mergedCoverUrl = mergedCoverUrl,
+		priorityOrder = priorityOrder,
+		enabled = enabled,
+	)
+}
 
 @Serializable
 sealed class BackupPrimitive {

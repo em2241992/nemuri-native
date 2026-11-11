@@ -12,6 +12,7 @@ import androidx.core.net.toUri
 import com.davemorrissey.labs.subscaleview.ImageSource
 import dagger.hilt.android.ActivityRetainedLifecycle
 import dagger.hilt.android.scopes.ActivityRetainedScoped
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -81,6 +82,7 @@ class PageLoader @Inject constructor(
 	private val mangaRepositoryFactory: MangaRepository.Factory,
 	private val imageProxyInterceptor: ImageProxyInterceptor,
 	private val downloadSourceThrottler: DownloadSourceThrottler,
+	private val silentFailoverLoader: SilentFailoverChapterLoader,
 ) {
 
 	val loaderScope = lifecycle.lifecycleScope + InternalErrorHandler() + Dispatchers.Default
@@ -231,6 +233,29 @@ class PageLoader @Inject constructor(
 	}
 
 	private suspend fun loadPageImpl(
+		page: MangaPage,
+		progress: MutableStateFlow<Float>,
+		isPrefetch: Boolean,
+		skipCache: Boolean,
+	): Uri = try {
+		loadSinglePageImpl(
+			page = page,
+			progress = progress,
+			isPrefetch = isPrefetch,
+			skipCache = skipCache,
+		)
+	} catch (error: Throwable) {
+		if (error is CancellationException) throw error
+		val fallbackPage = silentFailoverLoader.findFallbackPage(page) ?: throw error
+		loadSinglePageImpl(
+			page = fallbackPage,
+			progress = progress,
+			isPrefetch = isPrefetch,
+			skipCache = false,
+		)
+	}
+
+	private suspend fun loadSinglePageImpl(
 		page: MangaPage,
 		progress: MutableStateFlow<Float>,
 		isPrefetch: Boolean,

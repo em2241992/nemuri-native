@@ -241,6 +241,13 @@ class ReaderActivity :
                 .setAnchorView(viewBinding.toolbarDocked)
                 .show()
         }
+        viewModel.onFailoverSource.observeEvent(this) { sourceTitle ->
+            Snackbar.make(
+                viewBinding.container,
+                getString(R.string.switched_to_backup_source, sourceTitle),
+                Snackbar.LENGTH_SHORT,
+            ).setAnchorView(viewBinding.toolbarDocked).show()
+        }
         viewModel.readerSettingsProducer.observe(this) {
             viewBinding.infoBar.applyColorScheme(isBlackOnWhite = it.background.isLight(this))
         }

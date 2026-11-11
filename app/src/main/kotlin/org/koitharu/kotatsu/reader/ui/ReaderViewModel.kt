@@ -70,6 +70,7 @@ import org.koitharu.kotatsu.parsers.util.sizeOrZero
 import org.koitharu.kotatsu.reader.domain.ChaptersLoader
 import org.koitharu.kotatsu.reader.domain.DetectReaderModeUseCase
 import org.koitharu.kotatsu.reader.domain.PageLoader
+import org.koitharu.kotatsu.reader.domain.SilentFailoverChapterLoader
 import org.koitharu.kotatsu.reader.ui.config.ReaderSettings
 import org.koitharu.kotatsu.reader.ui.pager.ReaderUiState
 import org.koitharu.kotatsu.scrobbling.discord.ui.DiscordRpc
@@ -91,6 +92,7 @@ class ReaderViewModel @Inject constructor(
     settings: AppSettings,
     private val pageLoader: PageLoader,
     private val chaptersLoader: ChaptersLoader,
+    silentFailoverLoader: SilentFailoverChapterLoader,
     private val appShortcutManager: AppShortcutManager,
     private val detailsLoadUseCase: DetailsLoadUseCase,
     private val historyUpdateUseCase: HistoryUpdateUseCase,
@@ -132,6 +134,7 @@ class ReaderViewModel @Inject constructor(
     val onPageReadyToShare = MutableEventFlow<File>()
     val onLoadingError = MutableEventFlow<Throwable>()
     val onShowToast = MutableEventFlow<Int>()
+    val onFailoverSource = silentFailoverLoader.onFailoverSource
     val onAskNsfwIncognito = MutableEventFlow<Unit>()
     val uiState = MutableStateFlow<ReaderUiState?>(null)
 

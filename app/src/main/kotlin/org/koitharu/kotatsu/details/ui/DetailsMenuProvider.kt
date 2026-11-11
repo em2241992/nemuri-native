@@ -57,6 +57,7 @@ class DetailsMenuProvider(
 		menu.findItem(R.id.action_save).isVisible = manga?.source != null && manga.source != LocalMangaSource
 		menu.findItem(R.id.action_delete).isVisible = manga?.source == LocalMangaSource
 		menu.findItem(R.id.action_browser).isVisible = manga?.publicUrl?.isHttpUrl() == true
+		menu.findItem(R.id.action_merge_sources).isVisible = manga?.source != null && manga.source != LocalMangaSource
 		menu.findItem(R.id.action_alternatives).isVisible = manga?.source != LocalMangaSource
 		menu.findItem(R.id.action_shortcut).isVisible = ShortcutManagerCompat.isRequestPinShortcutSupported(activity)
 		menu.findItem(R.id.action_scrobbling).isVisible = viewModel.isScrobblingAvailable
@@ -96,6 +97,10 @@ class DetailsMenuProvider(
 
 			R.id.action_related -> {
 				router.openSearch(manga.title)
+			}
+
+			R.id.action_merge_sources -> {
+				router.showMergeSourcesSheet(viewModel.getSourceMangaOrNull() ?: manga)
 			}
 
 			R.id.action_alternatives -> {

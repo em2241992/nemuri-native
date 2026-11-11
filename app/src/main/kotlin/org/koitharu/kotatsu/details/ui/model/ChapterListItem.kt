@@ -1,9 +1,11 @@
 package org.koitharu.kotatsu.details.ui.model
 
+import android.content.Context
 import android.content.res.Resources
 import android.text.format.DateUtils
 import org.jsoup.internal.StringUtil.StringJoiner
 import org.koitharu.kotatsu.core.model.getLocalizedTitle
+import org.koitharu.kotatsu.core.model.getTitle
 import org.koitharu.kotatsu.list.ui.model.ListModel
 import org.koitharu.kotatsu.parsers.model.MangaChapter
 import kotlin.experimental.and
@@ -53,6 +55,16 @@ data class ChapterListItem(
 
 	val isGrid: Boolean
 		get() = hasFlag(FLAG_GRID)
+
+	val isShowSource: Boolean
+		get() = hasFlag(FLAG_SHOW_SOURCE)
+
+	fun getSourceBadge(context: Context): String? {
+		if (!isShowSource || chapter.source.name == "LOCAL") {
+			return null
+		}
+		return chapter.source.getTitle(context).takeIf { it.isNotBlank() }
+	}
 
 	operator fun contains(query: String): Boolean = with(chapter) {
 		title?.contains(query, ignoreCase = true) == true
@@ -106,6 +118,7 @@ data class ChapterListItem(
 
 	companion object {
 
+		const val FLAG_SHOW_SOURCE: Byte = 1
 		const val FLAG_UNREAD: Byte = 2
 		const val FLAG_CURRENT: Byte = 4
 		const val FLAG_NEW: Byte = 8

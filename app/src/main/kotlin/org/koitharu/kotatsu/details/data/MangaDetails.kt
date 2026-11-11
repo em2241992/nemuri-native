@@ -23,6 +23,8 @@ data class MangaDetails(
     val isLoaded: Boolean,
     /** Chapter count per branch as the source has them, before "merge scanlators" folded any. */
     private val unmergedBranches: Map<String?, Int>? = null,
+    /** True when one or more secondary merged sources are enabled for this primary series. */
+    val hasMergedSources: Boolean = false,
 ) {
 
     /** A user-typed description always wins over whatever the source provides. */

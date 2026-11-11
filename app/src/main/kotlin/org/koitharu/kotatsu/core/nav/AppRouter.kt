@@ -58,6 +58,7 @@ import org.koitharu.kotatsu.core.util.ext.toFileOrNull
 import org.koitharu.kotatsu.core.util.ext.toUriOrNull
 import org.koitharu.kotatsu.core.util.ext.withArgs
 import org.koitharu.kotatsu.details.ui.DetailsExpressiveActivity
+import org.koitharu.kotatsu.details.ui.merge.MergeSourcesSheet
 import org.koitharu.kotatsu.details.ui.pager.ChaptersPagesSheet
 import org.koitharu.kotatsu.details.ui.related.RelatedMangaActivity
 import org.koitharu.kotatsu.details.ui.scrobbling.ScrobblingInfoSheet
@@ -605,6 +606,12 @@ class AppRouter private constructor(
     fun showScrobblingInfoSheet(index: Int) {
         ScrobblingInfoSheet().withArgs(1) {
             putInt(KEY_INDEX, index)
+        }.showDistinct()
+    }
+
+    fun showMergeSourcesSheet(manga: Manga) {
+        MergeSourcesSheet().withArgs(1) {
+            putParcelable(KEY_MANGA, ParcelableManga(manga))
         }.showDistinct()
     }
 

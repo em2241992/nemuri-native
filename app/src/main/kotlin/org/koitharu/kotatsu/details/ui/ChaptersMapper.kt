@@ -24,6 +24,8 @@ fun MangaDetails.mapChapters(
 	if (remoteChapters.isEmpty() && localChapters.isEmpty()) {
 		return emptyList()
 	}
+	val primarySource = sourceManga.source
+	val showSourceBadges = hasMergedSources || remoteChapters.any { it.source != primarySource }
 	val bookmarked = bookmarks.mapToSet { it.chapterId }
 	val newFrom = if (newCount == 0 || remoteChapters.isEmpty()) Int.MAX_VALUE else remoteChapters.size - newCount
 	val ids = buildSet(maxOf(remoteChapters.size, localChapters.size)) {
@@ -48,6 +50,7 @@ fun MangaDetails.mapChapters(
 				isDownloaded = local != null,
 				isBookmarked = chapter.id in bookmarked,
 				isGrid = isGrid,
+				showSourceBadge = showSourceBadges,
 			)
 			if (isCurrent) {
 				isUnread = true

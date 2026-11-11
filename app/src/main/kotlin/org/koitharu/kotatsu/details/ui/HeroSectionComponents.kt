@@ -77,7 +77,9 @@ internal fun HeroSection(
 	coverUrl: String?,
 	favouriteLabel: String,
 	isFavourite: Boolean,
+	mergedSourcesCount: Int = 0,
 	onFavouriteClick: () -> Unit,
+	onMergeClick: () -> Unit = {},
 	actions: DetailsExpressiveActions,
 ) {
 	val nsfwLabel = when (manga.contentRating) {
@@ -187,13 +189,36 @@ internal fun HeroSection(
 							onSourceClick = { actions.onSourceClick(manga) },
 						)
 					}
-					FavouriteButton(
-						label = favouriteLabel,
-						isFavourite = isFavourite,
-						accent = accent,
-						onClick = onFavouriteClick,
-						horizontalPadding = 0.dp,
-					)
+					if (!manga.isLocal) {
+						Row(
+							modifier = Modifier.fillMaxWidth(),
+							horizontalArrangement = Arrangement.spacedBy(8.dp),
+							verticalAlignment = Alignment.CenterVertically,
+						) {
+							FavouriteButton(
+								label = favouriteLabel,
+								isFavourite = isFavourite,
+								accent = accent,
+								onClick = onFavouriteClick,
+								horizontalPadding = 0.dp,
+								modifier = Modifier.weight(1f),
+							)
+							MergeSourcesButton(
+								mergedCount = mergedSourcesCount,
+								accent = accent,
+								onClick = onMergeClick,
+								compact = true,
+							)
+						}
+					} else {
+						FavouriteButton(
+							label = favouriteLabel,
+							isFavourite = isFavourite,
+							accent = accent,
+							onClick = onFavouriteClick,
+							horizontalPadding = 0.dp,
+						)
+					}
 				},
 			) { measurables, constraints ->
 				val remainingWidth = constraints.maxWidth - compactCoverWidthPx - spacingPx
@@ -524,13 +549,13 @@ internal fun FavouriteButton(
 	accent: Color,
 	onClick: () -> Unit,
 	horizontalPadding: Dp = SCREEN_PADDING,
+	modifier: Modifier = Modifier.fillMaxWidth(),
 ) {
 	Surface(
 		onClick = onClick,
 		shape = RoundedCornerShape(20.dp),
 		color = if (isFavourite) accent else accent.copy(alpha = 0.16f),
-		modifier = Modifier
-			.fillMaxWidth()
+		modifier = modifier
 			.padding(horizontal = horizontalPadding)
 			.height(52.dp),
 	) {
@@ -561,6 +586,61 @@ internal fun FavouriteButton(
 				maxLines = 1,
 				overflow = TextOverflow.Ellipsis,
 			)
+		}
+	}
+}
+
+@Composable
+internal fun MergeSourcesButton(
+	mergedCount: Int,
+	accent: Color,
+	onClick: () -> Unit,
+	compact: Boolean = false,
+) {
+	val hasMerged = mergedCount > 0
+	val containerColor = if (hasMerged) {
+		accent.copy(alpha = 0.22f)
+	} else {
+		MaterialTheme.colorScheme.surfaceContainerHigh
+	}
+	val contentColor = if (hasMerged) {
+		accent
+	} else {
+		MaterialTheme.colorScheme.onSurface
+	}
+	Surface(
+		onClick = onClick,
+		shape = RoundedCornerShape(20.dp),
+		color = containerColor,
+		modifier = Modifier.height(52.dp),
+	) {
+		Row(
+			modifier = Modifier
+				.padding(horizontal = if (compact) 12.dp else 16.dp)
+				.height(52.dp),
+			verticalAlignment = Alignment.CenterVertically,
+			horizontalArrangement = Arrangement.Center,
+		) {
+			Icon(
+				painter = painterResource(R.drawable.ic_link),
+				contentDescription = stringResource(R.string.merge_sources),
+				tint = contentColor,
+				modifier = Modifier.size(19.dp),
+			)
+			if (!compact || hasMerged) {
+				Spacer(Modifier.width(6.dp))
+				Text(
+					text = if (hasMerged) {
+						if (compact) "+$mergedCount" else stringResource(R.string.merge_count_badge, mergedCount)
+					} else {
+						stringResource(R.string.merge_action)
+					},
+					style = MaterialTheme.typography.titleSmall,
+					fontWeight = FontWeight.SemiBold,
+					color = contentColor,
+					maxLines = 1,
+				)
+			}
 		}
 	}
 }

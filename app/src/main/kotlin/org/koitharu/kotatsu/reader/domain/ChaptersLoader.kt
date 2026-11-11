@@ -18,6 +18,7 @@ private const val PAGES_TRIM_THRESHOLD = 120
 @ViewModelScoped
 class ChaptersLoader @Inject constructor(
 	private val mangaRepositoryFactory: MangaRepository.Factory,
+	private val silentFailoverLoader: SilentFailoverChapterLoader,
 ) {
 
 	private val chapters = LongSparseArray<MangaChapter>()
@@ -101,8 +102,8 @@ class ChaptersLoader @Inject constructor(
 
 	private suspend fun loadChapter(chapterId: Long): List<ReaderPage> {
 		val chapter = checkNotNull(chapters[chapterId]) { "Requested chapter not found" }
-		val repo = mangaRepositoryFactory.create(chapter.source)
-		return repo.getPages(checkNotNull(manga), chapter).mapIndexed { index, page ->
+		val primaryManga = checkNotNull(manga)
+		return silentFailoverLoader.loadChapterPages(primaryManga, chapter).mapIndexed { index, page ->
 			ReaderPage(page, index, chapterId)
 		}
 	}

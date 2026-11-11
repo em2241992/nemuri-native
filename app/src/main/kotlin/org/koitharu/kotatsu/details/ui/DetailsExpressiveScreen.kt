@@ -4,8 +4,10 @@ package org.koitharu.kotatsu.details.ui
 
 import android.os.Build
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -36,6 +38,7 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.model.isLocal
 import org.koitharu.kotatsu.core.prefs.DetailsUiMode
 import org.koitharu.kotatsu.core.ui.widgets.ChipsView
 import org.koitharu.kotatsu.core.util.ext.mangaSourceExtra
@@ -56,6 +59,7 @@ class DetailsExpressiveActions(
 	val onSourceClick: (Manga) -> Unit,
 	val onLocalClick: (Manga) -> Unit,
 	val onFavoriteClick: (Manga) -> Unit,
+	val onMergeClick: (Manga) -> Unit,
 	val onAuthorClick: (String) -> Unit,
 	val onTagClick: (MangaTag) -> Unit,
 	val onScrobblingMore: () -> Unit,
@@ -76,6 +80,7 @@ fun DetailsExpressiveScreen(
 	isLoading: Boolean,
 	favouriteCount: Int,
 	favouriteLabel: String?,
+	mergedSourcesCount: Int = 0,
 	scrobblings: List<ScrobblingInfo>,
 	related: List<MangaListModel>,
 	localSize: Long,
@@ -132,6 +137,7 @@ fun DetailsExpressiveScreen(
 		} else {
 			val favLabel = favouriteLabel ?: stringResource(R.string.add_to_favourites)
 			val isFavourite = favouriteCount > 0
+			val sourceManga = details.sourceManga
 			HeroSection(
 				centered = centered,
 				manga = manga,
@@ -142,18 +148,44 @@ fun DetailsExpressiveScreen(
 				coverUrl = coverUrl,
 				favouriteLabel = favLabel,
 				isFavourite = isFavourite,
+				mergedSourcesCount = mergedSourcesCount,
 				onFavouriteClick = { actions.onFavoriteClick(manga) },
+				onMergeClick = { actions.onMergeClick(sourceManga) },
 				actions = actions,
 			)
 
 			if (centered) {
 				Spacer(Modifier.height(20.dp))
-				FavouriteButton(
-					label = favLabel,
-					isFavourite = isFavourite,
-					accent = accentColor,
-					onClick = { actions.onFavoriteClick(manga) },
-				)
+				if (!manga.isLocal) {
+					Row(
+						modifier = Modifier
+							.fillMaxWidth()
+							.padding(horizontal = SCREEN_PADDING),
+						horizontalArrangement = Arrangement.spacedBy(10.dp),
+						verticalAlignment = Alignment.CenterVertically,
+					) {
+						FavouriteButton(
+							label = favLabel,
+							isFavourite = isFavourite,
+							accent = accentColor,
+							onClick = { actions.onFavoriteClick(manga) },
+							horizontalPadding = 0.dp,
+							modifier = Modifier.weight(1f),
+						)
+						MergeSourcesButton(
+							mergedCount = mergedSourcesCount,
+							accent = accentColor,
+							onClick = { actions.onMergeClick(sourceManga) },
+						)
+					}
+				} else {
+					FavouriteButton(
+						label = favLabel,
+						isFavourite = isFavourite,
+						accent = accentColor,
+						onClick = { actions.onFavoriteClick(manga) },
+					)
+				}
 			}
 
 			Spacer(Modifier.height(8.dp))

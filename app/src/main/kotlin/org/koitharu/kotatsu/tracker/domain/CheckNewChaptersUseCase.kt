@@ -13,6 +13,7 @@ import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.util.MultiMutex
 import org.koitharu.kotatsu.core.util.ext.printStackTraceDebug
 import org.koitharu.kotatsu.core.util.ext.toInstantOrNull
+import org.koitharu.kotatsu.details.domain.MergedChapterAggregator
 import org.koitharu.kotatsu.history.data.HistoryRepository
 import org.koitharu.kotatsu.local.data.LocalMangaRepository
 import org.koitharu.kotatsu.parsers.model.Manga
@@ -32,6 +33,7 @@ class CheckNewChaptersUseCase @Inject constructor(
 	private val localMangaRepository: LocalMangaRepository,
 	private val settings: AppSettings,
 	private val mangaDataRepository: MangaDataRepository,
+	private val mergedChapterAggregator: MergedChapterAggregator,
 ) {
 
 	private val mutex = MultiMutex<Long>()
@@ -128,12 +130,20 @@ class CheckNewChaptersUseCase @Inject constructor(
 	}
 
 	private suspend fun fetchDetails(manga: Manga): Manga {
-		val repo = mangaRepositoryFactory.create(manga.source)
-		val details = if (repo is FreshMangaDetailsRepository) {
-			repo.getFreshDetails(manga)
-		} else {
-			repo.getDetails(manga)
-		}
+		val details = mergedChapterAggregator.loadMergedDetails(
+			primarySeed = manga,
+			force = true,
+			bypassCache = true,
+		) {
+			runCatchingCancellable {
+				val repo = mangaRepositoryFactory.create(manga.source)
+				if (repo is FreshMangaDetailsRepository) {
+					repo.getFreshDetails(manga)
+				} else {
+					repo.getDetails(manga)
+				}
+			}
+		}.getOrThrow()
 		// Persist so opening the manga later shows cached details instead of a cold load
 		mangaDataRepository.storeManga(details, replaceExisting = true, stripAppliedOverride = false, detailsFetched = true)
 		return details

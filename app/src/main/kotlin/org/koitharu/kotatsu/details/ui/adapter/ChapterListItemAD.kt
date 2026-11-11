@@ -4,6 +4,7 @@ import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
 import androidx.core.view.isVisible
 import com.hannesdorfmann.adapterdelegates4.dsl.adapterDelegateViewBinding
 import org.koitharu.kotatsu.R
@@ -33,6 +34,26 @@ fun chapterListItemAD(
 	bind {
 		binding.textViewTitle.text = item.getTitle(context.resources)
 		binding.textViewDescription.textAndVisible = item.description
+		val sourceBadge = item.getSourceBadge(context)
+		if (sourceBadge != null) {
+			val badgeAccent = accentColorProvider()
+				?: context.getThemeColor(androidx.appcompat.R.attr.colorPrimary)
+			val pillRadius = context.resources.displayMetrics.density * 6f
+			binding.textViewSourceBadge.background = GradientDrawable().apply {
+				shape = GradientDrawable.RECTANGLE
+				cornerRadius = pillRadius
+				setColor(ColorUtils.setAlphaComponent(badgeAccent, 36))
+			}
+			binding.textViewSourceBadge.setTextColor(
+				ColorUtils.setAlphaComponent(badgeAccent, if (item.isUnread || item.isCurrent) 242 else 160),
+			)
+			binding.textViewSourceBadge.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+			binding.textViewSourceBadge.text = sourceBadge
+			binding.textViewSourceBadge.isVisible = true
+		} else {
+			binding.textViewSourceBadge.background = null
+			binding.textViewSourceBadge.isVisible = false
+		}
 		when {
 			item.isCurrent -> {
 				val accent = accentColorProvider()

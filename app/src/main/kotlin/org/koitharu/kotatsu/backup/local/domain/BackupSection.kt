@@ -24,6 +24,7 @@ enum class BackupSection(
 	CHAPTERS("chapters", R.string.chapters),
 	FEED("feed", R.string.feed),
 	MANGA_PREFS("manga_prefs", R.string.sync_content_covers),
+	MERGED_SOURCES("merged_manga_sources", R.string.merged_sources),
 	;
 
 	companion object {

@@ -35,6 +35,7 @@ import org.koitharu.kotatsu.backup.local.data.model.MangaBackup
 import org.koitharu.kotatsu.backup.local.data.model.MangaPrefsBackup
 import org.koitharu.kotatsu.backup.local.data.model.MangaPrefsDataBackup
 import org.koitharu.kotatsu.backup.local.data.model.MangaWithChaptersBackup
+import org.koitharu.kotatsu.backup.local.data.model.MergedMangaBackup
 import org.koitharu.kotatsu.backup.local.data.model.ScrobblingBackup
 import org.koitharu.kotatsu.backup.local.data.model.SourceBackup
 import org.koitharu.kotatsu.backup.local.data.model.SourceSettingsBackup
@@ -175,6 +176,12 @@ class LocalBackupRepository @Inject constructor(
 					data = dumpMangaPrefs(),
 					serializer = serializer(),
 				)
+
+				BackupSection.MERGED_SOURCES -> output.writeJsonArray(
+					section = BackupSection.MERGED_SOURCES,
+					data = dumpMergedSources(),
+					serializer = serializer(),
+				)
 			}
 			progress?.emit(commonProgress)
 			commonProgress++
@@ -245,6 +252,19 @@ class LocalBackupRepository @Inject constructor(
 					BackupSection.FEED -> restoreFeed(input)
 
 					BackupSection.MANGA_PREFS -> restoreMangaPrefs(input)
+
+					BackupSection.MERGED_SOURCES -> input.readJsonArray<MergedMangaBackup>(serializer())
+						.restoreToDb {
+							upsertMangaBackup(it.primaryManga)
+							it.secondaryManga?.let { secondary -> upsertMangaBackup(secondary) }
+							val dao = getMergedMangaDao()
+							val existing = dao.findLink(
+								primaryMangaId = it.primaryMangaId,
+								mergedSourceName = it.mergedSourceName,
+								mergedMangaUrl = it.mergedMangaUrl,
+							)
+							dao.upsert(it.toEntity(existingId = existing?.id ?: 0L))
+						}
 
 					null -> CompositeResult.EMPTY
 				}
@@ -379,6 +399,24 @@ class LocalBackupRepository @Inject constructor(
 						coverData = cover?.data,
 						coverFileExtension = cover?.extension,
 					),
+				),
+			)
+		}
+	}
+
+	private fun dumpMergedSources(): Flow<MergedMangaBackup> = flow {
+		val mangaDao = database.getMangaDao()
+		val mangaCache = HashMap<Long, MangaBackup?>()
+		suspend fun mangaOf(id: Long): MangaBackup? =
+			mangaCache.getOrPut(id) { mangaDao.find(id)?.let(::MangaBackup) }
+		for (entity in database.getMergedMangaDao().findAll()) {
+			val primary = mangaOf(entity.primaryMangaId) ?: continue
+			val secondary = mangaOf(entity.mergedMangaId)
+			emit(
+				MergedMangaBackup(
+					entity = entity,
+					primaryManga = primary,
+					secondaryManga = secondary,
 				),
 			)
 		}

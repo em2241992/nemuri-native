@@ -146,6 +146,7 @@ class DetailsExpressiveActivity :
 			onSourceClick = { manga -> router.openList(manga.source, null, null) },
 			onLocalClick = { manga -> router.showLocalInfoDialog(manga) },
 			onFavoriteClick = { manga -> router.showFavoriteDialog(manga, null) },
+			onMergeClick = { manga -> router.showMergeSourcesSheet(manga) },
 			onAuthorClick = { author ->
 				router.showAuthorDialog(author, viewModel.getMangaOrNull()?.source ?: return@DetailsExpressiveActions)
 			},
@@ -174,6 +175,7 @@ class DetailsExpressiveActivity :
 				val history by viewModel.historyInfo.collectAsState()
 				val loading by viewModel.isLoading.collectAsState()
 				val favs by viewModel.favouriteCategories.collectAsState()
+				val mergedSources by viewModel.mergedSources.collectAsState()
 				val scrob by viewModel.scrobblingInfo.collectAsState()
 				val related by viewModel.relatedManga.collectAsState()
 				val localSize by viewModel.localSize.collectAsState()
@@ -193,6 +195,7 @@ class DetailsExpressiveActivity :
 					isLoading = loading,
 					favouriteCount = favs.size,
 					favouriteLabel = favLabel,
+					mergedSourcesCount = mergedSources.count { it.enabled },
 					scrobblings = scrob,
 					related = related,
 					localSize = localSize,

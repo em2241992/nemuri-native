@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.launchIn
@@ -40,6 +41,7 @@ import org.koitharu.kotatsu.core.util.ext.MutableEventFlow
 import org.koitharu.kotatsu.core.util.ext.call
 import org.koitharu.kotatsu.core.util.ext.computeSize
 import org.koitharu.kotatsu.details.data.MangaDetails
+import org.koitharu.kotatsu.details.data.MergeSourcesRepository
 import org.koitharu.kotatsu.details.domain.BranchComparator
 import org.koitharu.kotatsu.details.domain.DetailsInteractor
 import org.koitharu.kotatsu.details.domain.DetailsLoadUseCase
@@ -87,6 +89,7 @@ class DetailsViewModel @Inject constructor(
 	statsRepository: StatsRepository,
 	private val database: MangaDatabase,
 	private val mangaDataRepository: MangaDataRepository,
+	private val mergeSourcesRepository: MergeSourcesRepository,
 	mangaRepositoryFactory: MangaRepository.Factory,
 ) : ChaptersPagesViewModel(
 	settings = settings,
@@ -118,6 +121,10 @@ class DetailsViewModel @Inject constructor(
 	val favouriteCategories = interactor.observeFavourite(mangaId)
 		.withErrorHandling()
 		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, emptySet())
+
+	val mergedSources = mergeSourcesRepository.observeMergedSources(mangaId)
+		.withErrorHandling()
+		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, emptyList())
 
 	val isStatsAvailable = statsRepository.observeHasStats(mangaId)
 		.withErrorHandling()
@@ -231,6 +238,13 @@ class DetailsViewModel @Inject constructor(
 				val current = mangaDetails.value ?: return@onEach
 				mangaDetails.value = current.withOverride(mangaDataRepository.getOverride(mangaId))
 			}
+			.withErrorHandling()
+			.launchIn(viewModelScope + Dispatchers.Default)
+		// Automatically re-aggregate chapters whenever linked secondary sources, priorities, or enabled flags change.
+		mergeSourcesRepository.observeMergedSources(mangaId)
+			.distinctUntilChanged()
+			.drop(1)
+			.onEach { reload() }
 			.withErrorHandling()
 			.launchIn(viewModelScope + Dispatchers.Default)
 	}

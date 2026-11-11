@@ -34,6 +34,7 @@ import org.koitharu.kotatsu.core.logs.breadcrumb
 import org.koitharu.kotatsu.core.ui.model.MangaOverride
 import org.koitharu.kotatsu.core.util.ext.sanitize
 import org.koitharu.kotatsu.details.data.MangaDetails
+import org.koitharu.kotatsu.details.data.MergeSourcesRepository
 import org.koitharu.kotatsu.explore.domain.RecoverMangaUseCase
 import org.koitharu.kotatsu.local.data.LocalMangaRepository
 import org.koitharu.kotatsu.local.domain.model.LocalManga
@@ -59,6 +60,8 @@ class DetailsLoadUseCase @Inject constructor(
 	private val networkState: NetworkState,
 	private val mihonExtensionManager: MihonExtensionManager,
 	private val checkNewChaptersUseCase: Provider<CheckNewChaptersUseCase>,
+	private val mergeSourcesRepository: MergeSourcesRepository,
+	private val mergedChapterAggregator: MergedChapterAggregator,
 ) {
 
 	/**
@@ -74,6 +77,7 @@ class DetailsLoadUseCase @Inject constructor(
 			"Cannot resolve intent $intent"
 		}
 		val override = mangaDataRepository.getOverride(manga.id)
+		val hasMergedSources = !manga.isLocal && mergeSourcesRepository.hasEnabledMergedSources(manga.id)
 		// The downloaded copy has to be attached to the FIRST emission. The reader commits to this
 		// snapshot: it inits its chapter list from it and immediately starts fetching pages, so a
 		// later emission that adds the local copy arrives after the chapter was already pulled over
@@ -89,12 +93,13 @@ class DetailsLoadUseCase @Inject constructor(
 				override = override,
 				sourceDescription = manga.description?.parseAsHtml(withImages = false),
 				isLoaded = false,
+				hasMergedSources = hasMergedSources,
 			),
 		)
 		if (manga.isLocal) {
 			loadLocal(manga, override, force)
 		} else {
-			loadRemote(manga, override, force, savedManga, canUseStored)
+			loadRemote(manga, override, force, savedManga, hasMergedSources, canUseStored)
 		}
 	}.map { details ->
 		// per-manga "merge scanlators": fold the picked branches into one so the whole app
@@ -134,13 +139,17 @@ class DetailsLoadUseCase @Inject constructor(
 				),
 			)
 		} else {
-			val remoteDetails = getDetails(remoteManga, force).getOrNull()
+			val hasMerged = mergeSourcesRepository.hasEnabledMergedSources(remoteManga.id)
+			val remoteDetails = mergedChapterAggregator.loadMergedDetails(remoteManga, force) {
+				getDetails(remoteManga, force)
+			}.getOrNull()
 			val mangaDetails = MangaDetails(
 				manga = remoteDetails ?: remoteManga,
 				localManga = LocalManga(localDetails),
 				override = override,
 				sourceDescription = (remoteDetails ?: localDetails).description?.parseAsHtml(withImages = true),
 				isLoaded = true,
+				hasMergedSources = hasMerged,
 			)
 			if (remoteDetails != null) {
 				mangaDataRepository.storeManga(
@@ -166,6 +175,7 @@ class DetailsLoadUseCase @Inject constructor(
 		override: MangaOverride?,
 		force: Boolean,
 		savedManga: LocalManga?,
+		hasMergedSources: Boolean,
 		canUseStored: (suspend (Manga) -> Boolean)?,
 	) = coroutineScope {
 		// Skip the background refresh entirely if details were fetched recently enough
@@ -183,12 +193,15 @@ class DetailsLoadUseCase @Inject constructor(
 					override = override,
 					sourceDescription = manga.description?.parseAsHtml(withImages = true),
 					isLoaded = true,
+					hasMergedSources = hasMergedSources,
 				),
 			)
 			return@coroutineScope
 		}
 		val remoteDeferred = async {
-			getDetails(manga, force)
+			mergedChapterAggregator.loadMergedDetails(manga, force) {
+				getDetails(manga, force)
+			}
 		}
 		// Already resolved from the index? Skip the storage scan.
 		val localManga = savedManga ?: localMangaRepository.findSavedManga(manga, withDetails = true)
@@ -200,6 +213,7 @@ class DetailsLoadUseCase @Inject constructor(
 					override = override,
 					sourceDescription = localManga.manga.description?.parseAsHtml(withImages = true),
 					isLoaded = false,
+					hasMergedSources = hasMergedSources,
 				),
 			)
 		}
@@ -218,6 +232,7 @@ class DetailsLoadUseCase @Inject constructor(
 					sourceDescription = (manga.description ?: localManga?.manga?.description)
 						?.parseAsHtml(withImages = true),
 					isLoaded = true,
+					hasMergedSources = hasMergedSources,
 				),
 			)
 		}
@@ -232,6 +247,7 @@ class DetailsLoadUseCase @Inject constructor(
 			sourceDescription = (remoteDetails.description
 				?: localManga?.manga?.description)?.parseAsHtml(withImages = true),
 			isLoaded = true,
+			hasMergedSources = hasMergedSources,
 		)
 		// Commit the refreshed snapshot before exposing it as complete. Otherwise a process restart
 		// immediately after the UI updates can cancel this coroutine between emit() and the write,
