@@ -255,7 +255,7 @@ private fun AppearanceScreen(
 
 	// Bound preferences
 	var colorScheme by rememberStringPref(AppSettings.KEY_COLOR_THEME, ColorScheme.default.name)
-	var theme by rememberStringPref(AppSettings.KEY_THEME, "-1")
+	var theme by rememberStringPref(AppSettings.KEY_THEME, AppCompatDelegate.MODE_NIGHT_YES.toString())
 	var amoled by rememberBooleanPref(AppSettings.KEY_THEME_AMOLED, false)
 	var uiScale by rememberIntPref(AppSettings.KEY_UI_SCALE, 100)
 	var hapticFeedback by rememberBooleanPref(AppSettings.KEY_HAPTIC_FEEDBACK, true)

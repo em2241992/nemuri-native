@@ -4,7 +4,7 @@
 	<style name="Base.V31.Kotatsu" parent="Base.V27.Kotatsu">
 		<item name="android:windowSplashScreenAnimatedIcon">@drawable/avd_splash</item>
 		<item name="android:windowSplashScreenAnimationDuration">@integer/splash_screen_duration</item>
-		<item name="android:windowSplashScreenBackground">@color/kotatsu_surfaceContainer</item>
+		<item name="android:windowSplashScreenBackground">@color/kotatsu_background</item>
 	</style>
 
 	<style name="Theme.Kotatsu" parent="Base.V31.Kotatsu" />

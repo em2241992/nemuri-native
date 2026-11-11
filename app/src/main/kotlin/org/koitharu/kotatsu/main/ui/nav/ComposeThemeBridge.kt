@@ -12,8 +12,9 @@ import com.google.android.material.R as materialR
 
 /**
  * Builds a Material3 [ColorScheme] by resolving the host theme's color attributes
- * (?attr/colorPrimary etc.). Uses the host Context's theme so day/night and dynamic-color
- * variants are picked up without re-implementing the resolution logic in Compose.
+ * (?attr/colorPrimary etc.). Uses the host Context's theme so day/night, Nemuri Obsidian,
+ * AMOLED, Warm Amber, Midnight Slate, and dynamic-color variants stay 100% unified across
+ * Views and Compose without any top-bar/canvas color seam.
  */
 fun composeColorSchemeFromTheme(context: Context, isDark: Boolean): ColorScheme {
 	fun c(attr: Int, fallback: Color): Color {
@@ -29,6 +30,7 @@ fun composeColorSchemeFromTheme(context: Context, isDark: Boolean): ColorScheme 
 	}
 
 	val base = if (isDark) darkColorScheme() else lightColorScheme()
+	val bg = c(android.R.attr.colorBackground, base.background)
 	return base.copy(
 		primary = c(appcompatR.attr.colorPrimary, base.primary),
 		onPrimary = c(materialR.attr.colorOnPrimary, base.onPrimary),
@@ -40,8 +42,15 @@ fun composeColorSchemeFromTheme(context: Context, isDark: Boolean): ColorScheme 
 		onSecondaryContainer = c(materialR.attr.colorOnSecondaryContainer, base.onSecondaryContainer),
 		tertiary = c(materialR.attr.colorTertiary, base.tertiary),
 		onTertiary = c(materialR.attr.colorOnTertiary, base.onTertiary),
-		surface = c(materialR.attr.colorSurface, base.surface),
+		background = bg,
+		onBackground = c(materialR.attr.colorOnBackground, base.onBackground),
+		surface = c(materialR.attr.colorSurface, bg),
 		onSurface = c(materialR.attr.colorOnSurface, base.onSurface),
+		surfaceVariant = c(materialR.attr.colorSurfaceVariant, base.surfaceVariant),
+		surfaceDim = c(materialR.attr.colorSurfaceDim, bg),
+		surfaceBright = c(materialR.attr.colorSurfaceBright, base.surfaceBright),
+		surfaceContainerLowest = c(materialR.attr.colorSurfaceContainerLowest, base.surfaceContainerLowest),
+		surfaceContainerLow = c(materialR.attr.colorSurfaceContainerLow, base.surfaceContainerLow),
 		surfaceContainer = c(materialR.attr.colorSurfaceContainer, base.surfaceContainer),
 		surfaceContainerHigh = c(materialR.attr.colorSurfaceContainerHigh, base.surfaceContainerHigh),
 		surfaceContainerHighest = c(materialR.attr.colorSurfaceContainerHighest, base.surfaceContainerHighest),

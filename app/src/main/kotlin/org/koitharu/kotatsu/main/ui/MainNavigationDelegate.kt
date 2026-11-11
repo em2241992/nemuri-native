@@ -41,6 +41,7 @@ import org.koitharu.kotatsu.core.util.ext.hapticFeedback
 import org.koitharu.kotatsu.core.util.ext.setContentDescriptionAndTooltip
 import org.koitharu.kotatsu.core.util.ext.smoothScrollToTop
 import org.koitharu.kotatsu.databinding.NavigationRailFabBinding
+import org.koitharu.kotatsu.enhance.ui.EnhanceFragment
 import org.koitharu.kotatsu.explore.ui.ExploreFragment
 import org.koitharu.kotatsu.favourites.ui.container.FavouritesContainerFragment
 import org.koitharu.kotatsu.history.ui.HistoryListFragment
@@ -213,6 +214,7 @@ class MainNavigationDelegate(
 			R.id.nav_favorites -> FavouritesContainerFragment::class.java
 			R.id.nav_explore -> ExploreFragment::class.java
 			R.id.nav_feed -> FeedFragment::class.java
+			R.id.nav_enhance -> EnhanceFragment::class.java
 			R.id.nav_local -> LocalListFragment::class.java
 			R.id.nav_suggestions -> SuggestionsFragment::class.java
 			R.id.nav_bookmarks -> AllBookmarksFragment::class.java
@@ -231,6 +233,7 @@ class MainNavigationDelegate(
 		is FavouritesContainerFragment -> R.id.nav_favorites
 		is ExploreFragment -> R.id.nav_explore
 		is FeedFragment -> R.id.nav_feed
+		is EnhanceFragment -> R.id.nav_enhance
 		is LocalListFragment -> R.id.nav_local
 		is SuggestionsFragment -> R.id.nav_suggestions
 		is AllBookmarksFragment -> R.id.nav_bookmarks
@@ -371,7 +374,6 @@ class MainNavigationDelegate(
 		)
 			.onEach {
 				setItemVisibility(R.id.nav_suggestions, settings.isSuggestionsEnabled)
-				setItemVisibility(R.id.nav_feed, settings.isTrackerEnabled)
 				setNavbarIsLabeled(settings.isNavLabelsVisible)
 				(navBar as? FloatingBottomNavigationView)?.setUseLegacyNavigation(settings.isLegacyNavigationBar)
 			}.launchIn(lifecycleOwner.lifecycleScope)
@@ -445,6 +447,6 @@ class MainNavigationDelegate(
 
 	companion object {
 
-		const val MAX_ITEM_COUNT = 4
+		const val MAX_ITEM_COUNT = 5
 	}
 }

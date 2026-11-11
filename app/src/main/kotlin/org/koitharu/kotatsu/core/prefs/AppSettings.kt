@@ -76,6 +76,22 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 				putBoolean(KEY_NAV_PINNED_RESET, true)
 			}
 		}
+		// One-time: configure Nemuri's 5-tab bottom dock (Library, History, Feed, Explore, Enhance).
+		if (!prefs.getBoolean(KEY_NAV_NEMURI_5TAB_RESET, false)) {
+			prefs.edit {
+				putString(
+					KEY_NAV_MAIN,
+					listOf(
+						NavItem.FAVORITES,
+						NavItem.HISTORY,
+						NavItem.FEED,
+						NavItem.EXPLORE,
+						NavItem.ENHANCE,
+					).joinToString(",") { it.name },
+				)
+				putBoolean(KEY_NAV_NEMURI_5TAB_RESET, true)
+			}
+		}
 	}
 	private val onboardingInstallId by lazy {
 		runCatching {
@@ -98,7 +114,7 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 
 	val theme: Int
 		get() = prefs.getString(KEY_THEME, null)?.toIntOrNull()
-			?: AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+			?: AppCompatDelegate.MODE_NIGHT_YES
 
 	fun setTheme(mode: Int) = prefs.edit {
 		putString(KEY_THEME, mode.toString())
@@ -137,11 +153,11 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		get() {
 			val raw = prefs.getString(KEY_NAV_MAIN, null)?.split(',')
 			val items = if (raw.isNullOrEmpty()) {
-				listOf(NavItem.FAVORITES, NavItem.FEED, NavItem.HISTORY, NavItem.EXPLORE)
+				listOf(NavItem.FAVORITES, NavItem.HISTORY, NavItem.FEED, NavItem.EXPLORE, NavItem.ENHANCE)
 			} else {
 				raw.mapNotNull { x -> NavItem.entries.find(x) }.ifEmpty { listOf(NavItem.EXPLORE) }
 			}
-			return items.take(4)
+			return items.take(5)
 		}
 		set(value) {
 			prefs.edit {
@@ -1496,6 +1512,7 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		private val SYNC_LOCAL_KEYS = setOf(
 			KEY_UI_SCALE_RESET,
 			KEY_NAV_PINNED_RESET,
+			KEY_NAV_NEMURI_5TAB_RESET,
 			KEY_LOCAL_STORAGE,
 			KEY_LOCAL_MANGA_DIRS,
 			KEY_PAGES_SAVE_DIR,
@@ -1539,6 +1556,7 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		private const val KEY_IMAGES_PROXY_OLD = "images_proxy"
 		private const val KEY_PRELOAD_POLICIES_RESET = "preload_policies_reset_v1"
 		private const val KEY_NAV_PINNED_RESET = "nav_pinned_reset_v1"
+		private const val KEY_NAV_NEMURI_5TAB_RESET = "nav_nemuri_5tab_reset_v1"
 
 		// values
 		private const val READER_CROP_PAGED = 1

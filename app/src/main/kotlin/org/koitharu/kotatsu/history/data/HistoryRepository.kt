@@ -188,7 +188,7 @@ class HistoryRepository @Inject constructor(
 	 */
 	private suspend fun onHistoryChanged(manga: Manga, chapterId: Long, updateScrobblers: Boolean) {
 		newChaptersUseCaseProvider.get()(manga, chapterId)
-		if (updateScrobblers) {
+		if (updateScrobblers && !shouldSkip(manga)) {
 			scrobblers.forEach { it.tryScrobble(manga, chapterId) }
 		}
 	}

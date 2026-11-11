@@ -184,6 +184,7 @@ private fun ColorSchemeCard(
 			style = MaterialTheme.typography.labelSmall,
 			fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
 			maxLines = 1,
+			overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
 			color = if (enabled) MaterialTheme.colorScheme.onSurface
 			else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
 		)

@@ -61,7 +61,7 @@ object StatusBarScrim {
 
 	/** The scrim as a view background; the details screen draws the same curve in Compose. */
 	fun drawable(context: Context): GradientDrawable {
-		val surface = MaterialColors.getColor(context, materialR.attr.colorSurface, Color.TRANSPARENT)
+		val surface = MaterialColors.getColor(context, android.R.attr.colorBackground, Color.TRANSPARENT)
 		return GradientDrawable(
 			GradientDrawable.Orientation.TOP_BOTTOM,
 			IntArray(alphas.size) { ColorUtils.setAlphaComponent(surface, alphas[it].roundToInt()) },

@@ -44,6 +44,7 @@ class FloatingBottomNavigationView @JvmOverloads constructor(
 	private val labeledState = MutableStateFlow(true)
 	private val navColorsState = MutableStateFlow(readNavColors())
 	private val continueVisibleState = MutableStateFlow(false)
+	private val incognitoActiveState = MutableStateFlow(false)
 	private var continueClickListener: (() -> Unit)? = null
 	private var continueLongClickListener: (() -> Unit)? = null
 	private val sourceItems = mutableListOf<NavItem>()
@@ -67,10 +68,11 @@ class FloatingBottomNavigationView @JvmOverloads constructor(
 				val labeled by labeledState.collectAsState()
 				val navColors by navColorsState.collectAsState()
 				val showContinue by continueVisibleState.collectAsState()
+				val isIncognito by incognitoActiveState.collectAsState()
 				Box(
 					modifier = Modifier
 						.fillMaxWidth()
-						.padding(horizontal = 12.dp, vertical = 8.dp),
+						.padding(horizontal = 8.dp, vertical = 8.dp),
 					contentAlignment = Alignment.Center,
 				) {
 					FloatingNavBar(
@@ -85,6 +87,7 @@ class FloatingBottomNavigationView @JvmOverloads constructor(
 						},
 						modifier = Modifier.wrapContentWidth(),
 						showContinue = showContinue,
+						isIncognito = isIncognito,
 						onContinueClick = { continueClickListener?.invoke() },
 						onContinueLongClick = { continueLongClickListener?.invoke() },
 					)
@@ -148,6 +151,10 @@ class FloatingBottomNavigationView @JvmOverloads constructor(
 	/** Toggle the standalone circular "continue reading" button rendered next to the floating bar. */
 	fun setContinueVisible(value: Boolean) {
 		continueVisibleState.value = value
+	}
+
+	fun setIncognitoActive(value: Boolean) {
+		incognitoActiveState.value = value
 	}
 
 	fun setOnContinueClickListener(listener: (() -> Unit)?) {

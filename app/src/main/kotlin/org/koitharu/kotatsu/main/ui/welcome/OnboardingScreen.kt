@@ -193,19 +193,27 @@ fun OnboardingScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 // Hero icon bubble
-                Surface(
-                    shape = RoundedCornerShape(28.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.size(96.dp),
-                ) {
-                    Icon(
-                        painter = painterResource(iconRes),
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                if (pageIndex == 0) {
+                    org.koitharu.kotatsu.core.ui.compose.NemuriBrandLogo(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .padding(22.dp),
+                            .size(96.dp)
+                            .clip(RoundedCornerShape(28.dp)),
                     )
+                } else {
+                    Surface(
+                        shape = RoundedCornerShape(28.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.size(96.dp),
+                    ) {
+                        Icon(
+                            painter = painterResource(iconRes),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(22.dp),
+                        )
+                    }
                 }
                 Spacer(Modifier.height(20.dp))
                 Text(

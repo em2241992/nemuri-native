@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <string name="app_name" translatable="false">DropSauce</string>
+    <string name="app_name" translatable="false">Nemuri</string>
     <string name="local_storage">Local storage</string>
     <string name="favourites">Favorites</string>
     <string name="history">History</string>
@@ -335,7 +335,7 @@
     <string name="sync_data_deleted">Sync data deleted from Google Drive</string>
     <string name="sync_section_sync">Sync</string>
     <string name="sync_section_sync_info">What you choose above is saved in your Google Drive and kept the same on all your devices. Sign in on a new device to get it all back. Sync runs by itself whenever you open or leave the app.</string>
-    <string name="sync_legacy_device">A device with an older version of DropSauce is still syncing. Update it so it also gets the changes made here.</string>
+    <string name="sync_legacy_device">A device with an older version of Nemuri is still syncing. Update it so it also gets the changes made here.</string>
     <string name="sync_content_favourites">Favorites &amp; categories</string>
     <string name="sync_content_history">History &amp; reading progress</string>
     <string name="sync_content_bookmarks">Bookmarks</string>
@@ -744,7 +744,7 @@
     <string name="onboarding_permission_notifications">Allow notifications</string>
     <string name="onboarding_permission_battery">Disable battery optimization</string>
     <string name="onboarding_finish_title">All set</string>
-    <string name="onboarding_finish_description">Join the DropSauce community and visit our website to stay up to date.</string>
+    <string name="onboarding_finish_description">Join the Nemuri community and visit our website to stay up to date.</string>
     <string name="onboarding_sync_title">Sync &amp; Restore</string>
     <string name="onboarding_sync_description">Sign in with Google to sync your library across devices, or restore a backup to pick up where you left off.</string>
     <string name="onboarding_restore_dropsauce">Restore Kotatsu backup</string>
@@ -893,7 +893,7 @@
     <string name="show_pages_thumbs">Show pages thumbnails</string>
     <string name="show_pages_thumbs_summary">Enable the \"Pages\" tab on the details screen</string>
     <string name="error_no_data_received">No data was received from server</string>
-    <string name="unsupported_backup_message">Please select a valid DropSauce or Mihon backup file</string>
+    <string name="unsupported_backup_message">Please select a valid Nemuri or Mihon backup file</string>
     <string name="list_ellipsize_pattern" translatable="false">(+%d)</string>
     <!-- Short hours format pattern -->
     <string name="hours_short">%d h</string>
@@ -977,8 +977,8 @@
     <string name="unhide">Unhide</string>
     <string name="extension_hidden">Extension hidden from Explore</string>
     <string name="extensions_hidden">Extensions hidden from Explore</string>
-    <string name="plugin_incompatible">Incompatible plugin or internal error. Make sure you are using the latest version of the plugin and DropSauce</string>
-    <string name="plugin_incompatible_with_cause">Plugin error: %s\n Make sure you are using the latest version of the plugin and DropSauce</string>
+    <string name="plugin_incompatible">Incompatible plugin or internal error. Make sure you are using the latest version of the plugin and Nemuri</string>
+    <string name="plugin_incompatible_with_cause">Plugin error: %s\n Make sure you are using the latest version of the plugin and Nemuri</string>
     <string name="connection_ok">Connection is OK</string>
     <string name="invalid_proxy_configuration">Invalid proxy configuration</string>
     <string name="show_quick_filters">Show quick filters</string>
@@ -1069,7 +1069,7 @@
     <string name="shizuku_summary">Grant privileged access via Shizuku for silent, no-prompt installs</string>
     <string name="shizuku_not_installed">Shizuku is not installed. Install it, start it, then try again.</string>
     <string name="shizuku_not_running">Shizuku is not running. Start the Shizuku app first.</string>
-    <string name="shizuku_permission_denied">Shizuku permission was denied. Allow DropSauce in Shizuku and try again.</string>
+    <string name="shizuku_permission_denied">Shizuku permission was denied. Allow Nemuri in Shizuku and try again.</string>
     <string name="shizuku_install_failed">Silent installation failed. %1$s</string>
     <string name="shizuku_invalid_package">The downloaded extension APK is invalid or has an unexpected package name.</string>
     <string name="ext_auto_update_title">Auto-update extensions</string>
@@ -1128,10 +1128,10 @@
     <string name="error_details">Error details</string>
     <string name="error_disclaimer_manga">Try to open manga in a web browser to ensure it is available on its source.</string>
     <string name="error_disclaimer_captcha_required">Open the source and open any manga to verify captcha</string>
-    <string name="error_disclaimer_app_outdated">It looks like your version of DropSauce is out of date. Please install the latest version to get all available fixes.</string>
+    <string name="error_disclaimer_app_outdated">It looks like your version of Nemuri is out of date. Please install the latest version to get all available fixes.</string>
     <string name="error_disclaimer_report">You can submit a bug report to the developers. This will help us investigate and fix the issue.</string>
     <string name="link_to_manga_on_s">Link to manga on %s</string>
-    <string name="link_to_manga_in_app">Link to manga in DropSauce</string>
+    <string name="link_to_manga_in_app">Link to manga in Nemuri</string>
     <string name="clear_browser_data">Clear browser data</string>
     <string name="clear_browser_data_summary">Clear browser data such as cache and cookies. Warning: Authorization in manga sources may become invalid</string>
     <string name="no_write_permission_to_file">Does not have permission to write a file</string>
@@ -1196,7 +1196,7 @@
     <string name="local_storage_cleanup">Local storage cleanup</string>
     <string name="main_screen">Main screen</string>
     <string name="main_screen_fab">Show floating Continue button</string>
-    <string name="main_screen_fab_summary">Allows to continue reading in a one click. This button will not appear in incognito mode or when the history is empty</string>
+    <string name="main_screen_fab_summary">Allows continuing reading in one tap, or long-pressing to switch Incognito Mode</string>
     <string name="error_corrupted_zip">Corrupted ZIP archive (%s)</string>
     <string name="discord" translatable="false">Discord</string>
     <string name="discord_rpc">Discord Rich Presence</string>
@@ -1205,7 +1205,7 @@
     <string name="discord_token_description">Enter your Discord Token or click %s to get it using browser</string>
     <string name="discord_token_hint">Paste your Discord Token here</string>
     <string name="discord_rpc_summary">Show your reading status on Discord</string>
-    <string name="discord_rpc_description">Reading manga on DropSauce - a manga reader app</string>
+    <string name="discord_rpc_description">Reading manga on Nemuri - a manga reader app</string>
     <string name="reading_s">Reading %s</string>
     <string name="read_on_s">Read on %s</string>
     <string name="rpc_skip_nsfw_summary">Do not use RPC for adult content</string>
@@ -1284,4 +1284,23 @@
     <string name="eye_reminder_title">Time to rest your eyes</string>
     <string name="eye_reminder_text">You\'ve been reading for %s. Take a short break and give your eyes some rest.</string>
     <string name="dismiss">Dismiss</string>
+    <string name="library">Library</string>
+    <string name="enhance">Enhance</string>
+    <string name="updates_pending">Updates pending</string>
+    <string name="theme_name_nemuri_obsidian">Nemuri Obsidian</string>
+    <string name="theme_name_true_amoled">True AMOLED</string>
+    <string name="theme_name_bedtime_amber">Bedtime Warm Amber</string>
+    <string name="theme_name_midnight_slate">Midnight Slate</string>
+    <string name="incognito_switcher_subtitle">Pause reading history and external tracker sync while active.</string>
+    <string name="continue_reading_in_incognito">Continue Reading in Incognito</string>
+    <string name="incognito_mode_enabled_toast">Incognito Mode enabled — history &amp; tracker sync paused</string>
+    <string name="incognito_mode_disabled_toast">Incognito Mode disabled</string>
+    <string name="enhance_hub_subtitle">Smart library hygiene, high-precision reader rendering &amp; source migration</string>
+    <string name="enhance_reader_upscale">32-Bit High-Precision Rendering</string>
+    <string name="enhance_reader_upscale_summary">Eliminate gradient banding on dark webtoon panels and monochrome manga pages</string>
+    <string name="enhance_source_migration">Broken Sources &amp; Mass Migration</string>
+    <string name="enhance_source_migration_summary">Scan your library for dead extensions and migrate titles to active sources</string>
+    <string name="enhance_open_migration">Open Migration Assistant</string>
+    <string name="enhance_open_reader_settings">Reader Engine Settings</string>
+    <string name="enhance_open_extensions">Manage Extensions</string>
 </resources>

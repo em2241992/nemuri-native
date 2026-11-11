@@ -20,9 +20,8 @@ class ReadingResumeEnabledUseCase @Inject constructor(
 
 	operator fun invoke(): Flow<Boolean> = settings.observe(
 		AppSettings.KEY_MAIN_FAB,
-		AppSettings.KEY_INCOGNITO_MODE,
 	).map {
-		settings.isMainFabEnabled && !settings.isIncognitoModeEnabled
+		settings.isMainFabEnabled
 	}.distinctUntilChanged()
 		.flatMapLatest { isFabEnabled ->
 			if (isFabEnabled) {

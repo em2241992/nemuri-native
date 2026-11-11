@@ -13,6 +13,7 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -98,6 +99,7 @@ fun FloatingNavBar(
 	onItemReselected: (Int) -> Unit,
 	modifier: Modifier = Modifier,
 	showContinue: Boolean = false,
+	isIncognito: Boolean = false,
 	onContinueClick: () -> Unit = {},
 	onContinueLongClick: () -> Unit = {},
 ) {
@@ -120,10 +122,10 @@ fun FloatingNavBar(
 			Row(
 				modifier = Modifier
 					.heightIn(min = 64.dp)
-					.padding(horizontal = 8.dp, vertical = 8.dp)
+					.padding(horizontal = 6.dp, vertical = 8.dp)
 					// Smoothly relayout siblings when one pill grows/shrinks horizontally.
 					.animateContentSize(animationSpec = MotionSizeSpec),
-				horizontalArrangement = Arrangement.spacedBy(4.dp),
+				horizontalArrangement = Arrangement.spacedBy(2.dp),
 				verticalAlignment = Alignment.CenterVertically,
 			) {
 				items.forEach { item ->
@@ -159,6 +161,7 @@ fun FloatingNavBar(
 		) {
 			FloatingContinueButton(
 				colors = colors,
+				isIncognito = isIncognito,
 				onClick = {
 					haptic(HapticEffect.CONFIRM)
 					onContinueClick()
@@ -176,16 +179,18 @@ fun FloatingNavBar(
 @Composable
 private fun FloatingContinueButton(
 	colors: FloatingNavBarColors,
+	isIncognito: Boolean,
 	onClick: () -> Unit,
 	onLongClick: () -> Unit,
 ) {
+	val cs = MaterialTheme.colorScheme
 	val container by animateColorAsState(
-		targetValue = Color(colors.selectedContainer),
+		targetValue = if (isIncognito) cs.secondaryContainer else Color(colors.selectedContainer),
 		animationSpec = MotionColorSpec,
 		label = "continueContainer",
 	)
 	val content by animateColorAsState(
-		targetValue = Color(colors.selectedContent),
+		targetValue = if (isIncognito) cs.onSecondaryContainer else Color(colors.selectedContent),
 		animationSpec = MotionColorSpec,
 		label = "continueContent",
 	)
@@ -197,10 +202,10 @@ private fun FloatingContinueButton(
 		state = tooltipState,
 	) {
 		Surface(
-			// M3 Expressive square FAB: 16dp corner on a 56dp container
-			shape = RoundedCornerShape(16.dp),
+			shape = CircleShape,
 			color = container,
 			contentColor = content,
+			border = if (isIncognito) BorderStroke(1.5.dp, cs.primary) else null,
 			modifier = Modifier
 				.size(56.dp)
 				.semantics { contentDescription = label },
@@ -218,6 +223,17 @@ private fun FloatingContinueButton(
 					tint = content,
 					modifier = Modifier.size(24.dp),
 				)
+				if (isIncognito) {
+					Icon(
+						painter = painterResource(R.drawable.ic_incognito),
+						contentDescription = null,
+						tint = cs.primary,
+						modifier = Modifier
+							.align(Alignment.BottomEnd)
+							.padding(8.dp)
+							.size(13.dp),
+					)
+				}
 			}
 		}
 	}
@@ -269,7 +285,7 @@ private fun FloatingNavItem(
 		contentAlignment = Alignment.Center,
 	) {
 		Row(
-			modifier = Modifier.padding(horizontal = 14.dp),
+			modifier = Modifier.padding(horizontal = if (selected && showLabel) 11.dp else 9.dp),
 			verticalAlignment = Alignment.CenterVertically,
 			horizontalArrangement = Arrangement.Center,
 		) {

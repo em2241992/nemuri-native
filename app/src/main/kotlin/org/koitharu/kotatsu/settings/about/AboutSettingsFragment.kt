@@ -138,7 +138,7 @@ class AboutSettingsFragment : BaseComposeSettingsFragment(R.string.about) {
 		viewModel.onUpdateAvailable.observeEvent(viewLifecycleOwner, ::onUpdateAvailable)
 		viewModel.onExportLog.observeEvent(viewLifecycleOwner) { content ->
 			pendingLogContent = content
-			saveLogLauncher.launch("dropsauce_log_${System.currentTimeMillis()}.txt")
+			saveLogLauncher.launch("nemuri_log_${System.currentTimeMillis()}.txt")
 		}
 	}
 
@@ -363,9 +363,7 @@ private fun AboutHero(appVersion: String) {
 					.background(cs.onPrimaryContainer.copy(alpha = 0.10f)),
 				contentAlignment = Alignment.Center,
 			) {
-				Image(
-					painter = rememberAnyDrawablePainter(org.koitharu.kotatsu.R.mipmap.ic_launcher),
-					contentDescription = null,
+				org.koitharu.kotatsu.core.ui.compose.NemuriBrandLogo(
 					modifier = Modifier
 						.size(88.dp)
 						.clip(RoundedCornerShape(26.dp)),
@@ -387,7 +385,7 @@ private fun AboutHero(appVersion: String) {
 				)
 				AboutMetaPill(
 					icon = R.drawable.ic_github,
-					text = "HuzaifaKhalid1311",
+					text = "em2241992",
 				)
 			}
 		}

@@ -38,6 +38,7 @@ import com.google.android.material.appbar.AppBarLayout.LayoutParams.SCROLL_FLAG_
 import com.google.android.material.appbar.AppBarLayout.LayoutParams.SCROLL_FLAG_SNAP
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import com.google.android.material.search.SearchView
+import com.google.android.material.snackbar.Snackbar
 import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
 import dagger.hilt.android.AndroidEntryPoint
@@ -55,6 +56,7 @@ import kotlin.math.roundToInt
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.browser.AdListUpdateService
 import org.koitharu.kotatsu.core.exceptions.resolve.SnackbarErrorObserver
+import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.ui.dialog.buildAlertDialog
@@ -76,8 +78,11 @@ import org.koitharu.kotatsu.core.util.ext.setOptionalIconsVisibleCompat
 import org.koitharu.kotatsu.core.util.ext.start
 import org.koitharu.kotatsu.databinding.ActivityMainBinding
 import org.koitharu.kotatsu.details.service.MangaPrefetchService
+import org.koitharu.kotatsu.enhance.ui.EnhanceFragment
+import org.koitharu.kotatsu.explore.ui.ExploreFragment
 import org.koitharu.kotatsu.favourites.ui.container.FavouritesContainerFragment
 import org.koitharu.kotatsu.history.ui.HistoryListFragment
+import org.koitharu.kotatsu.list.ui.config.ListConfigSection
 import org.koitharu.kotatsu.local.ui.LocalIndexUpdateService
 import org.koitharu.kotatsu.local.ui.LocalStorageCleanupWorker
 import org.koitharu.kotatsu.main.ui.owners.AppBarOwner
@@ -91,6 +96,8 @@ import org.koitharu.kotatsu.search.ui.suggestion.SearchSuggestionListenerImpl
 import org.koitharu.kotatsu.search.ui.suggestion.SearchSuggestionMenuProvider
 import org.koitharu.kotatsu.search.ui.suggestion.SearchSuggestionViewModel
 import org.koitharu.kotatsu.search.ui.suggestion.adapter.SearchSuggestionAdapter
+import org.koitharu.kotatsu.settings.SettingsActivity
+import org.koitharu.kotatsu.tracker.ui.feed.FeedFragment
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -114,6 +121,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 	private var lastBottomInset = 0
 	private val shrinkFabRunnable = Runnable { viewBinding.fab?.shrink() }
 	private var navSystemBarBottom: Int = 0
+	private var lastIncognitoObserved: Boolean? = null
 
 
 	override val appBar: AppBarLayout
@@ -152,9 +160,20 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 		viewBinding.statusBarScrim.background = StatusBarScrim.drawable(this)
 
 		viewBinding.fab?.setOnClickListener(this)
-		viewBinding.navRail?.headerView?.findViewById<View>(R.id.railFab)?.setOnClickListener(this)
+		viewBinding.fab?.setOnLongClickListener {
+			openIncognitoSwitcher()
+			true
+		}
+		viewBinding.navRail?.headerView?.findViewById<View>(R.id.railFab)?.apply {
+			setOnClickListener(this@MainActivity)
+			setOnLongClickListener {
+				openIncognitoSwitcher()
+				true
+			}
+		}
 		viewBinding.bottomNav?.setOnContinueClickListener { viewModel.openLastReader() }
-		viewBinding.bottomNav?.setOnContinueLongClickListener { viewModel.openLastDetails() }
+		viewBinding.bottomNav?.setOnContinueLongClickListener { openIncognitoSwitcher() }
+		viewBinding.buttonQuickAction.setOnClickListener { onQuickActionClick() }
 		viewBinding.buttonOverflow.setOnClickListener(this::showMainOverflowMenu)
 		viewBinding.buttonSettings.setOnClickListener {
 			router.openSettings()
@@ -207,16 +226,15 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 		viewModel.onError.observeEvent(this, SnackbarErrorObserver(viewBinding.container, null))
 		viewModel.isLoading.observe(this, this::onLoadingStateChanged)
 		viewModel.isResumeEnabled.observe(this, this::onResumeEnabledChanged)
-		settings.observe(AppSettings.KEY_NAV_LEGACY).observe(this) { adjustFabVisibility() }
+		settings.observe(AppSettings.KEY_NAV_LEGACY, AppSettings.KEY_MAIN_FAB).observe(this) { adjustFabVisibility() }
 		viewModel.feedCounter.observe(this, ::onFeedCounterChanged)
 		viewModel.hasExtensionUpdates.observe(this) { hasUpdates ->
 			navigationDelegate.setCounter(NavItem.EXPLORE, if (hasUpdates) -1 else 0)
 		}
 		viewModel.appUpdate.observe(this) { update ->
-			// The dot stays for as long as the update does; only the bubble honours the dismissal.
+			// Zero top notification banners: keep the settings dot indicator without pushing UI down.
 			viewBinding.badgeSettingsUpdate.visibility = if (update != null) View.VISIBLE else View.GONE
-			viewBinding.layoutUpdatePrompt.isVisible =
-				update != null && update.name != settings.dismissedUpdateVersion
+			viewBinding.layoutUpdatePrompt.isVisible = false
 		}
 		viewModel.isBottomNavPinned.observe(this, ::setNavbarPinned)
 		searchSuggestionViewModel.isIncognitoModeEnabled.observe(this, this::onIncognitoModeChanged)
@@ -238,6 +256,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 	override fun onFragmentChanged(fragment: Fragment, fromUser: Boolean) {
 		adjustFabVisibility(topFragment = fragment)
 		adjustAppbar(topFragment = fragment)
+		updateQuickActionButton(topFragment = fragment)
 		if (fromUser) {
 			actionModeDelegate.finishActionMode()
 			viewBinding.appbar.setExpanded(true)
@@ -415,8 +434,74 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 			options and EditorInfoCompat.IME_FLAG_NO_PERSONALIZED_LEARNING.inv()
 		}
 		viewBinding.searchView.getEditText().imeOptions = options
-		viewBinding.layoutIncognito.isVisible = isIncognito
+		viewBinding.layoutIncognito.isVisible = false
+		viewBinding.bottomNav?.setIncognitoActive(isIncognito)
+		val previous = lastIncognitoObserved
+		lastIncognitoObserved = isIncognito
+		if (previous != null && previous != isIncognito) {
+			Snackbar.make(
+				viewBinding.container,
+				if (isIncognito) R.string.incognito_mode_enabled_toast else R.string.incognito_mode_disabled_toast,
+				Snackbar.LENGTH_SHORT,
+			).apply {
+				bottomNav?.let(::setAnchorView)
+			}.show()
+		}
 		invalidateOptionsMenu()
+	}
+
+	private fun openIncognitoSwitcher() {
+		showIncognitoSwitcherDialog(
+			activity = this,
+			initialIncognito = settings.isIncognitoModeEnabled,
+			onToggleIncognito = { enabled ->
+				viewModel.setIncognitoMode(enabled)
+			},
+			onContinueInIncognito = {
+				viewModel.setIncognitoMode(true)
+				viewModel.openLastReader()
+			},
+		)
+	}
+
+	private fun updateQuickActionButton(topFragment: Fragment?) {
+		val useSparkles = topFragment is ExploreFragment || topFragment is EnhanceFragment
+		viewBinding.buttonQuickAction.setIconResource(
+			if (useSparkles) R.drawable.ic_sparkles else R.drawable.ic_tune,
+		)
+		viewBinding.buttonQuickAction.contentDescription = getString(
+			if (useSparkles) R.string.enhance else R.string.filter,
+		)
+	}
+
+	private fun onQuickActionClick() {
+		when (val fragment = navigationDelegate.primaryFragment) {
+			is FavouritesContainerFragment -> {
+				val section = fragment.currentCategoryId?.let(ListConfigSection::Favorites)
+					?: ListConfigSection.General
+				router.showListConfigSheet(section)
+			}
+			is HistoryListFragment -> router.showListConfigSheet(ListConfigSection.History)
+			is FeedFragment -> startActivity(
+				Intent(this, SettingsActivity::class.java).setAction(AppRouter.ACTION_TRACKER),
+			)
+			is ExploreFragment -> {
+				val nav = bottomNav ?: viewBinding.navRail
+				if (nav?.menu?.findItem(R.id.nav_enhance) != null) {
+					nav.selectedItemId = R.id.nav_enhance
+				} else {
+					startActivity(
+						Intent(this, SettingsActivity::class.java)
+							.setAction(SettingsActivity.ACTION_BROKEN_SOURCES),
+					)
+				}
+			}
+			is EnhanceFragment -> startActivity(
+				Intent(this, SettingsActivity::class.java)
+					.setAction(SettingsActivity.ACTION_BROKEN_SOURCES),
+			)
+			else -> router.showListConfigSheet(ListConfigSection.General)
+		}
 	}
 
 	private fun onLoadingStateChanged(isLoading: Boolean) {
@@ -484,7 +569,12 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 		} else {
 			hideMainFab()
 		}
-		viewBinding.bottomNav?.setContinueVisible(useFloatingContinue && isResumeEnabled)
+		viewBinding.bottomNav?.setContinueVisible(
+			useFloatingContinue &&
+				settings.isMainFabEnabled &&
+				!actionModeDelegate.isActionModeStarted &&
+				!isSearchOpened,
+		)
 	}
 
 	private fun showMainFab(

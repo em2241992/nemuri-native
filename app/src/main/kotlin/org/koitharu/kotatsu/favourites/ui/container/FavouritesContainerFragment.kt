@@ -166,6 +166,9 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 
 	private fun View.locationOnScreenX() = IntArray(2).also(::getLocationOnScreen)[0]
 
+	val currentCategoryId: Long?
+		get() = (findCurrentFragment() as? org.koitharu.kotatsu.favourites.ui.list.FavouritesListFragment)?.categoryId
+
 	private fun findCurrentFragment(): Fragment? {
 		return childFragmentManager.findCurrentPagerFragment(
 			viewBinding?.pager ?: return null,

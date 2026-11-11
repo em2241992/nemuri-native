@@ -92,6 +92,26 @@ abstract class BaseActivity<B : ViewBinding> :
 		exceptionResolver = entryPoint.exceptionResolverFactory.create(this)
 		enableEdgeToEdge()
 		super.onCreate(savedInstanceState)
+		if (this !is BaseFullscreenActivity<*>) {
+			val tv = android.util.TypedValue()
+			if (theme.resolveAttribute(android.R.attr.colorBackground, tv, true)) {
+				val bgColor = if (tv.resourceId != 0) {
+					androidx.core.content.ContextCompat.getColor(this, tv.resourceId)
+				} else {
+					tv.data
+				}
+				@Suppress("DEPRECATION")
+				window.statusBarColor = bgColor
+				@Suppress("DEPRECATION")
+				window.navigationBarColor = bgColor
+				window.decorView.setBackgroundColor(bgColor)
+				val isLightBg = androidx.core.graphics.ColorUtils.calculateLuminance(bgColor) > 0.5
+				WindowCompat.getInsetsController(window, window.decorView).apply {
+					isAppearanceLightStatusBars = isLightBg
+					isAppearanceLightNavigationBars = isLightBg
+				}
+			}
+		}
 		maybePlayRecreateFadeIn()
 		settings.subscribe(statusBarPrefListener)
 		applyStatusBarVisibility(settings.isStatusBarHidden)

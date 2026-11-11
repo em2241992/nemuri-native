@@ -1037,9 +1037,8 @@ internal fun buildAvailablePageItems(
 		)
 	}
 	if (updates.isNotEmpty()) {
-		add(ListHeader(R.string.updates_available))
+		add(ListHeader(R.string.updates_pending, R.string.update_all))
 		addAll(updates)
-		add(ButtonFooter(R.string.update_all))
 	}
 	if (installed.isNotEmpty()) {
 		add(ListHeader(if (isPrivateMode) R.string.enabled else R.string.installed))

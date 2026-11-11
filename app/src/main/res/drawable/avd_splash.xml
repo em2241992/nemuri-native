@@ -1,22 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="200dp"
-    android:height="200dp"
-    android:viewportWidth="1600"
-    android:viewportHeight="1600">
-    <group
-        android:translateX="232.48"
-        android:translateY="254.31">
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M0,6.39L533.51,0l194.31,369.82-201.05,361.61-516.66,5.48L0,6.39ZM448.14,355.21l-170.72-180.8-21.34,366.17,192.06-185.37Z"/>
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M518.67,1091.38l-27.45-283.16,208.12-8.17,22.87,106.19,83.48-4.54,9.15-88.94-317.9-83.5,29.73-357.59,568.34-11.8,40.02,313.11-209.27,11.8-35.45-132.51h-77.76l-6.86,120.71,316.76,84.4-27.45,331.27-576.34,2.72Z"/>
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M8.86,768.55l441.62,-13.27l36.01,336.09l-478.26,-15.78l0.63,-307.04z"/>
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M586.77,0l140.45,326.4l365.58,11.16l19.69,-337.35l-525.72,-0.21z"/>
-    </group>
+	xmlns:aapt="http://schemas.android.com/aapt"
+	android:width="200dp"
+	android:height="200dp"
+	android:viewportWidth="512"
+	android:viewportHeight="512">
+	<group
+		android:pivotX="256"
+		android:pivotY="256"
+		android:scaleX="0.68"
+		android:scaleY="0.68">
+		<!-- Upper Left Crescent Moon -->
+		<path
+			android:fillColor="#FF5CE1E6"
+			android:pathData="M 188 98 A 56 56 0 1 0 242 168 A 46 46 0 1 1 188 98 Z" />
+
+		<!-- Minimalist Sleeping Cat Curled Over the Book -->
+		<path
+			android:fillColor="#FF1E2638"
+			android:strokeLineJoin="round"
+			android:strokeWidth="8"
+			android:pathData="M 168 292 C 168 228, 224 196, 286 204 L 304 168 L 328 202 L 354 172 L 366 218 C 386 242, 382 278, 358 292 Z">
+			<aapt:attr name="android:strokeColor">
+				<gradient
+					android:startX="168"
+					android:startY="168"
+					android:endX="386"
+					android:endY="292"
+					android:type="linear">
+					<item android:offset="0.0" android:color="#FF5CE1E6" />
+					<item android:offset="1.0" android:color="#FF7F7FD5" />
+				</gradient>
+			</aapt:attr>
+		</path>
+
+		<!-- Two Peaceful Sleeping Eyes -->
+		<path
+			android:fillColor="#00000000"
+			android:strokeColor="#FF5CE1E6"
+			android:strokeLineCap="round"
+			android:strokeWidth="5"
+			android:pathData="M 292 244 Q 306 256 320 244" />
+		<path
+			android:fillColor="#00000000"
+			android:strokeColor="#FF5CE1E6"
+			android:strokeLineCap="round"
+			android:strokeWidth="5"
+			android:pathData="M 332 244 Q 346 256 360 244" />
+
+		<!-- Open Glowing Manga Book Base -->
+		<path android:pathData="M 96 312 Q 176 284 256 318 Q 336 284 416 312 L 402 384 Q 330 358 256 392 Q 182 358 110 384 Z">
+			<aapt:attr name="android:fillColor">
+				<gradient
+					android:startX="96"
+					android:startY="284"
+					android:endX="416"
+					android:endY="392"
+					android:type="linear">
+					<item android:offset="0.0" android:color="#FF5CE1E6" />
+					<item android:offset="1.0" android:color="#FF7F7FD5" />
+				</gradient>
+			</aapt:attr>
+		</path>
+		<path
+			android:strokeColor="#FF090C10"
+			android:strokeLineCap="round"
+			android:strokeWidth="8"
+			android:pathData="M 256 318 L 256 392" />
+	</group>
 </vector>

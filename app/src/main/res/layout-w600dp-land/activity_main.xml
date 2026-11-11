@@ -62,6 +62,7 @@
 				android:orientation="horizontal"
 				android:gravity="center_vertical"
 				android:clipToPadding="false"
+				android:paddingHorizontal="8dp"
 				android:paddingBottom="8dp"
 				app:layout_scrollFlags="scroll|enterAlways|snap">
 
@@ -69,15 +70,8 @@
 					android:id="@+id/textView_title"
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
-					android:paddingStart="@dimen/screen_padding"
-					android:textAppearance="?textAppearanceTitleLarge"
-					tools:ignore="RtlSymmetry"
+					android:visibility="gone"
 					tools:text="@string/history" />
-
-				<View
-					android:layout_width="0dp"
-					android:layout_height="0dp"
-					android:layout_weight="1" />
 
 				<FrameLayout
 					android:layout_width="48dp"
@@ -119,13 +113,31 @@
 
 				<com.google.android.material.search.SearchBar
 					android:id="@+id/search_bar"
-					android:layout_width="wrap_content"
+					android:layout_width="0dp"
 					android:layout_height="wrap_content"
-					android:layout_marginEnd="8dp"
+					android:layout_weight="1"
+					android:layout_marginEnd="4dp"
 					android:hint="@string/search_manga"
-					app:adaptiveMaxWidthEnabled="true"
+					app:adaptiveMaxWidthEnabled="false"
 					app:hideNavigationIcon="true"
 					app:forceDefaultNavigationOnClickListener="false" />
+
+				<com.google.android.material.button.MaterialButton
+					android:id="@+id/button_quick_action"
+					style="?materialIconButtonStyle"
+					android:layout_width="48dp"
+					android:layout_height="48dp"
+					android:padding="0dp"
+					android:insetTop="0dp"
+					android:insetBottom="0dp"
+					android:insetLeft="0dp"
+					android:insetRight="0dp"
+					app:icon="@drawable/ic_tune"
+					app:iconSize="24dp"
+					app:iconPadding="0dp"
+					app:iconGravity="textStart"
+					app:iconTint="?attr/colorTopBarIcon"
+					android:contentDescription="@string/filter" />
 
 				<FrameLayout
 					android:layout_width="48dp"

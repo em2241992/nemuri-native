@@ -192,7 +192,7 @@ class AppLogger @Inject constructor(
 					writeLocked(
 						"\n$separator\n=== SESSION STARTED: ${timestamp()} (PID: $pid) ===\n" +
 							"=== Lines timestamped before this are replayed from Android's log buffer: they were\n" +
-							"=== logged before recording started, so they lack DropSauce's extra detail.\n$separator",
+							"=== logged before recording started, so they lack Nemuri's extra detail.\n$separator",
 					)
 					writer?.flush()
 				}
@@ -335,8 +335,8 @@ class AppLogger @Inject constructor(
 
 	/** What a reader (human or LLM) needs before the timeline: where, what was installed, what went wrong. */
 	private fun summary(log: String) = buildString {
-		appendLine("== DROPSAUCE BUG REPORT LOG ==")
-		appendLine("App: DropSauce ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}, ${BuildConfig.BUILD_TYPE})")
+		appendLine("== NEMURI BUG REPORT LOG ==")
+		appendLine("App: Nemuri ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}, ${BuildConfig.BUILD_TYPE})")
 		appendLine("Device: Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}), ${Build.MANUFACTURER} ${Build.MODEL}, ${Build.SUPPORTED_ABIS.firstOrNull()}")
 		appendLine("WebView: ${webViewInfo()}")
 		appendLine("Network (at export, changes are in the timeline): ${networkInfo()}")
@@ -344,7 +344,7 @@ class AppLogger @Inject constructor(
 		appendLine("Timeline lines are \"time level tag: message\". Tags: Screen = screen shown, Tap/Menu = user input,")
 		appendLine("Setting = setting changed, Search = search run, Reader/DetailsLoad/MangaRepository = what loaded and")
 		appendLine("from where, HTTP = network request, Network = connection changed, UserError = error message the user")
-		appendLine("saw, DropSauce = caught error.")
+		appendLine("saw, Nemuri = caught error.")
 		appendLine()
 		appendLine("== ERRORS (first seen, times seen) ==")
 		val errors = collectErrors(log)
@@ -482,7 +482,7 @@ internal fun collectErrors(log: String): Map<String, Pair<String, Int>> {
 			val trimmed = message.trim()
 			val isTraceLine = trimmed.startsWith("at ") || trimmed.startsWith("...") ||
 				trimmed.startsWith("Caused by") || trimmed.startsWith("Suppressed")
-			val isError = level == "E" || level == "F" || tag == "UserError" || tag == "DropSauce"
+			val isError = level == "E" || level == "F" || tag == "UserError" || tag == "Nemuri" || tag == "DropSauce"
 			if (!isError || isTraceLine || trimmed.isEmpty()) return@forEach
 			"$level $tag: ${trimmed.take(200)}"
 		}

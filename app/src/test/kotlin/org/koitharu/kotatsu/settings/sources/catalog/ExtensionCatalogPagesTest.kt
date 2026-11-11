@@ -47,9 +47,8 @@ class ExtensionCatalogPagesTest {
 
 		assertEquals(
 			listOf(
-				ListHeader(R.string.updates_available),
+				ListHeader(R.string.updates_pending, R.string.update_all),
 				update,
-				ButtonFooter(R.string.update_all),
 				ListHeader(R.string.installed),
 				installed,
 			),

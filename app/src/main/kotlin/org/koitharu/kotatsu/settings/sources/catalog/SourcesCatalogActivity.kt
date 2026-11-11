@@ -362,7 +362,9 @@ class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
 	}
 
 	override fun onListHeaderClick(item: ListHeader, view: View) {
-		// Section headers on store tabs are labels only.
+		if (item.buttonTextRes == R.string.update_all) {
+			viewModel.updateAllExtensions()
+		}
 	}
 
 	override fun onExtensionSettingsClick(item: SourceCatalogItem.Extension) {
