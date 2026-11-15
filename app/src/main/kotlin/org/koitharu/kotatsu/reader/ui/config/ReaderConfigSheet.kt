@@ -69,6 +69,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -100,6 +101,7 @@ import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.core.parser.MangaRepository
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.ReaderMode
+import org.koitharu.kotatsu.core.prefs.ReaderScrubberPosition
 import org.koitharu.kotatsu.core.ui.sheet.AdaptiveSheetBehavior
 import org.koitharu.kotatsu.core.ui.sheet.BaseAdaptiveSheet
 import org.koitharu.kotatsu.core.util.ext.findParentCallback
@@ -287,6 +289,18 @@ class ReaderConfigSheet : BaseAdaptiveSheet<SheetReaderConfigBinding>() {
         var isDoubleOnLandscape by remember { mutableStateOf(settings.isReaderDoubleOnLandscape) }
         var isDoubleOnFoldable by remember { mutableStateOf(settings.isReaderDoubleOnFoldable) }
         var sensitivity by remember { mutableFloatStateOf(settings.readerDoublePagesSensitivity * 100f) }
+        var scrubberPosition by remember { mutableStateOf(settings.readerScrubberPosition) }
+        var showPageNumbers by remember { mutableStateOf(settings.isPagesNumbersEnabled) }
+        var showZoomButtons by remember { mutableStateOf(settings.isReaderZoomButtonsEnabled) }
+        var showChapterTransitions by remember { mutableStateOf(settings.isReaderChapterTransitionsEnabled) }
+        var skipDuplicateChapters by remember { mutableStateOf(settings.isReaderSkipDuplicateChaptersEnabled) }
+        var isGaplessVertical by remember { mutableStateOf(!settings.isWebtoonGapsEnabled) }
+        var isSmartSeamStitch by remember { mutableStateOf(settings.isWebtoonSmartSeamStitchEnabled) }
+        var keepScreenOn by remember { mutableStateOf(settings.isReaderKeepScreenOn) }
+        var bedtimeSleepGuard by remember { mutableStateOf(settings.isReaderBedtimeSleepGuardEnabled) }
+        var warmAmberEnabled by remember { mutableStateOf(settings.isReaderWarmAmberEnabled) }
+        var warmAmberWarmth by remember { mutableFloatStateOf(settings.readerWarmAmberWarmth) }
+        var nightDimmerAlpha by remember { mutableFloatStateOf(settings.readerNightDimmerAlpha) }
 
         // StateFlow observations from ViewModel and OrientationHelper flow
         val isBookmarkAdded by viewModel.isBookmarkAdded.collectAsState()
@@ -321,13 +335,18 @@ class ReaderConfigSheet : BaseAdaptiveSheet<SheetReaderConfigBinding>() {
                 // The pager is pinned to the Read Mode page's height so swiping to the (otherwise
                 // shorter) Tools page never resizes the sheet; the tools grid stretches to fill it.
                 val density = LocalDensity.current
+                val maxPagerHeight = (LocalConfiguration.current.screenHeightDp.dp * 0.68f)
+                    .coerceIn(360.dp, 540.dp)
                 var pagerHeightPx by remember { mutableIntStateOf(0) }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .heightIn(max = maxPagerHeight)
                         .then(
                             if (pagerHeightPx > 0) {
-                                Modifier.height(with(density) { pagerHeightPx.toDp() })
+                                Modifier.height(
+                                    with(density) { pagerHeightPx.toDp() }.coerceAtMost(maxPagerHeight),
+                                )
                             } else {
                                 Modifier
                             },
@@ -375,6 +394,76 @@ class ReaderConfigSheet : BaseAdaptiveSheet<SheetReaderConfigBinding>() {
                                         onSensitivityChange = { value ->
                                             settings.readerDoublePagesSensitivity = value / 100f
                                             sensitivity = value
+                                        },
+                                    )
+
+                                    ScrubberAndHudConfigSection(
+                                        scrubberPosition = scrubberPosition,
+                                        onScrubberPositionChange = { pos ->
+                                            settings.readerScrubberPosition = pos
+                                            scrubberPosition = pos
+                                        },
+                                        showPageNumbers = showPageNumbers,
+                                        onShowPageNumbersChange = { enabled ->
+                                            settings.isPagesNumbersEnabled = enabled
+                                            showPageNumbers = enabled
+                                        },
+                                        showZoomButtons = showZoomButtons,
+                                        onShowZoomButtonsChange = { enabled ->
+                                            settings.isReaderZoomButtonsEnabled = enabled
+                                            showZoomButtons = enabled
+                                        },
+                                        showChapterTransitions = showChapterTransitions,
+                                        onShowChapterTransitionsChange = { enabled ->
+                                            settings.isReaderChapterTransitionsEnabled = enabled
+                                            showChapterTransitions = enabled
+                                        },
+                                        skipDuplicateChapters = skipDuplicateChapters,
+                                        onSkipDuplicateChaptersChange = { enabled ->
+                                            settings.isReaderSkipDuplicateChaptersEnabled = enabled
+                                            skipDuplicateChapters = enabled
+                                        },
+                                    )
+
+                                    VerticalStripSeamSection(
+                                        isVerticalOrWebtoon = currentMode == ReaderMode.WEBTOON || currentMode == ReaderMode.VERTICAL,
+                                        isGaplessVertical = isGaplessVertical,
+                                        onGaplessVerticalChange = { gapless ->
+                                            settings.isWebtoonGapsEnabled = !gapless
+                                            isGaplessVertical = gapless
+                                        },
+                                        isSmartSeamStitch = isSmartSeamStitch,
+                                        onSmartSeamStitchChange = { enabled ->
+                                            settings.isWebtoonSmartSeamStitchEnabled = enabled
+                                            isSmartSeamStitch = enabled
+                                        },
+                                    )
+
+                                    BedtimeComfortSection(
+                                        keepScreenOn = keepScreenOn,
+                                        onKeepScreenOnChange = { enabled ->
+                                            settings.isReaderKeepScreenOn = enabled
+                                            keepScreenOn = enabled
+                                        },
+                                        bedtimeSleepGuard = bedtimeSleepGuard,
+                                        onBedtimeSleepGuardChange = { enabled ->
+                                            settings.isReaderBedtimeSleepGuardEnabled = enabled
+                                            bedtimeSleepGuard = enabled
+                                        },
+                                        warmAmberEnabled = warmAmberEnabled,
+                                        onWarmAmberEnabledChange = { enabled ->
+                                            settings.isReaderWarmAmberEnabled = enabled
+                                            warmAmberEnabled = enabled
+                                        },
+                                        warmAmberWarmth = warmAmberWarmth,
+                                        onWarmAmberWarmthChange = { warmth ->
+                                            settings.readerWarmAmberWarmth = warmth
+                                            warmAmberWarmth = warmth
+                                        },
+                                        nightDimmerAlpha = nightDimmerAlpha,
+                                        onNightDimmerAlphaChange = { alpha ->
+                                            settings.readerNightDimmerAlpha = alpha
+                                            nightDimmerAlpha = alpha
                                         },
                                     )
 

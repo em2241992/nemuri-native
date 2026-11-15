@@ -11,6 +11,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.os.SystemClock
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ComposeView
@@ -27,9 +28,13 @@ import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePadding
+import androidx.fragment.app.DialogFragment
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import org.koitharu.kotatsu.settings.compose.DropSauceTheme
 import androidx.lifecycle.lifecycleScope
@@ -64,6 +69,7 @@ import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.ReaderMode
+import org.koitharu.kotatsu.core.prefs.ReaderScrubberPosition
 import org.koitharu.kotatsu.core.prefs.observeAsFlow
 import org.koitharu.kotatsu.core.ui.BaseFullscreenActivity
 import org.koitharu.kotatsu.core.ui.dialog.setCheckbox
@@ -83,6 +89,7 @@ import org.koitharu.kotatsu.core.util.ext.postDelayed
 import org.koitharu.kotatsu.core.util.ext.toUriOrNull
 import org.koitharu.kotatsu.core.util.ext.zipWithPrevious
 import org.koitharu.kotatsu.databinding.ActivityReaderBinding
+import org.koitharu.kotatsu.details.domain.NekoChapterCanonicalizer
 import org.koitharu.kotatsu.details.ui.pager.ChaptersPagesViewModel
 import org.koitharu.kotatsu.details.ui.pager.pages.PagesSavedObserver
 import org.koitharu.kotatsu.local.data.isEpub
@@ -98,8 +105,11 @@ import org.koitharu.kotatsu.reader.ui.tts.ReaderTtsService
 import org.koitharu.kotatsu.reader.ui.pager.ReaderPage
 import org.koitharu.kotatsu.reader.ui.pager.ReaderUiState
 import org.koitharu.kotatsu.reader.ui.tapgrid.TapGridDispatcher
+import java.util.ArrayList
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import androidx.appcompat.R as appcompatR
 
 @AndroidEntryPoint
@@ -157,6 +167,31 @@ class ReaderActivity :
 
     // Tracks whether the foldable device is in an unfolded state (half-opened or flat)
     private var isFoldUnfolded: Boolean = false
+
+    private val isUiVisibleFlow = MutableStateFlow(false)
+    private val visibleNavBottomPxFlow = MutableStateFlow(0)
+    private val chapterTransitionFlow = MutableStateFlow<ChapterTransitionBannerState?>(null)
+    private var passiveHudOverlay: View? = null
+    private var verticalScrubberOverlay: ComposeView? = null
+    private var chapterTransitionOverlay: ComposeView? = null
+    private var isZoomWanted: Boolean = false
+    private var currentSystemBars: Insets = Insets.NONE
+    private var lastTouchElapsedMs: Long = SystemClock.elapsedRealtime()
+    private var isBedtimeSleepGuardTriggered: Boolean = false
+
+    private val dialogVisibilityTracker = object : FragmentManager.FragmentLifecycleCallbacks() {
+        override fun onFragmentStarted(fm: FragmentManager, f: Fragment) {
+            if (f is DialogFragment) updateZoomAndScrubberVisibility()
+        }
+
+        override fun onFragmentStopped(fm: FragmentManager, f: Fragment) {
+            if (f is DialogFragment) updateZoomAndScrubberVisibility()
+        }
+
+        override fun onFragmentViewDestroyed(fm: FragmentManager, f: Fragment) {
+            if (f is DialogFragment) updateZoomAndScrubberVisibility()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -242,18 +277,38 @@ class ReaderActivity :
                 .show()
         }
         viewModel.onFailoverSource.observeEvent(this) { sourceTitle ->
-            Snackbar.make(
-                viewBinding.container,
+            viewBinding.toastView.showTemporary(
                 getString(R.string.switched_to_backup_source, sourceTitle),
-                Snackbar.LENGTH_SHORT,
-            ).setAnchorView(viewBinding.toolbarDocked).show()
+                TOAST_DURATION_LONG,
+            )
+        }
+        viewModel.onSkippedDuplicateChapter.observeEvent(this) { skippedNumber ->
+            viewBinding.toastView.showTemporary(
+                getString(R.string.reader_skipped_duplicate_toast, skippedNumber),
+                TOAST_DURATION_LONG,
+            )
         }
         viewModel.readerSettingsProducer.observe(this) {
             viewBinding.infoBar.applyColorScheme(isBlackOnWhite = it.background.isLight(this))
         }
-        viewModel.isZoomControlsEnabled.observe(this) {
-            viewBinding.zoomControl.isVisible = it
+        viewModel.isZoomControlsEnabled.observe(this) { enabled ->
+            isZoomWanted = enabled
+            updateZoomAndScrubberVisibility()
         }
+        viewModel.scrubberPosition.observe(this) {
+            updateVerticalScrubberLayout()
+            updateZoomAndScrubberVisibility()
+        }
+        viewModel.isChapterTransitionsEnabled.observe(this) { enabled ->
+            if (!enabled) {
+                chapterTransitionFlow.value = null
+                chapterTransitionOverlay?.isVisible = false
+                updateZoomAndScrubberVisibility()
+            }
+        }
+        supportFragmentManager.registerFragmentLifecycleCallbacks(dialogVisibilityTracker, true)
+        setupPhase4HudOverlays()
+        setupBedtimeSleepGuard()
         addMenuProvider(
             ReaderMenuProvider(
                 onOpenMenu = ::openMenu,
@@ -349,6 +404,22 @@ class ReaderActivity :
         idlingDetector.onUserInteraction()
     }
 
+    override fun onResume() {
+        super.onResume()
+        isUiVisibleFlow.value = viewBinding.appbarTop.isVisible
+        if (isBedtimeSleepGuardTriggered) {
+            restoreFromBedtimeSleepGuard()
+        } else {
+            lastTouchElapsedMs = SystemClock.elapsedRealtime()
+        }
+        updateZoomAndScrubberVisibility()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        updateZoomAndScrubberVisibility()
+    }
+
     override fun onPause() {
         super.onPause()
         viewModel.onPause()
@@ -360,6 +431,7 @@ class ReaderActivity :
     }
 
     override fun onDestroy() {
+        supportFragmentManager.unregisterFragmentLifecycleCallbacks(dialogVisibilityTracker)
         // Backgrounding the reader keeps speaking; leaving it does not. A rotation is neither.
         if (isFinishing) {
             tts.stop()
@@ -385,6 +457,7 @@ class ReaderActivity :
         // the right height instead of appearing at the bottom edge and jumping up afterwards.
         updateTimerPanelOffset(animate = false)
         updateScrollTimerButton()
+        updateZoomAndScrubberVisibility()
         (readerManager.currentReader as? EpubReaderFragment)?.setTtsPickMode(viewBinding.ttsControl.isVisible)
     }
 
@@ -464,14 +537,20 @@ class ReaderActivity :
     }
 
     override fun onGridLongTouch(area: TapGridArea): Boolean {
-        val handled = !readerManager.isEpub && isReaderResumed() && controlDelegate.onGridLongTouch(area)
+        if (readerManager.isEpub || !isReaderResumed()) return false
+        val handledByCustomGrid = controlDelegate.onGridLongTouch(area)
+        if (!handledByCustomGrid) {
+            openMenu()
+        }
         // The finger is still down when the long-press action fires (e.g. the config sheet opens),
         // and the ongoing gesture keeps feeding the pager underneath — any drift after the
         // long-press scrolls the page abruptly. Cancel the rest of this gesture for the content.
-        if (handled) {
-            isTouchCancelled = true
-        }
-        return handled
+        isTouchCancelled = true
+        return true
+    }
+
+    override fun isReaderScrollIdle(): Boolean {
+        return readerManager.currentReader?.isReaderScrollIdle() != false
     }
 
     override fun onProcessTouch(rawX: Int, rawY: Int): Boolean {
@@ -481,7 +560,9 @@ class ReaderActivity :
             rawX >= viewBinding.root.width - gestureInsets.right ||
             rawY >= viewBinding.root.height - gestureInsets.bottom ||
             viewBinding.appbarTop.hasGlobalPoint(rawX, rawY) ||
-            viewBinding.toolbarDocked?.hasGlobalPoint(rawX, rawY) == true
+            viewBinding.toolbarDocked?.hasGlobalPoint(rawX, rawY) == true ||
+            verticalScrubberOverlay?.takeIf { it.isVisible }?.hasGlobalPoint(rawX, rawY) == true ||
+            chapterTransitionOverlay?.takeIf { it.isVisible }?.hasGlobalPoint(rawX, rawY) == true
         ) {
             false
         } else {
@@ -493,7 +574,12 @@ class ReaderActivity :
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        lastTouchElapsedMs = SystemClock.elapsedRealtime()
+        if (isBedtimeSleepGuardTriggered && ev.actionMasked == MotionEvent.ACTION_DOWN) {
+            restoreFromBedtimeSleepGuard()
+        }
         if (viewModel.isEyeReminderVisible.value) return super.dispatchTouchEvent(ev)
+        if (chapterTransitionOverlay?.isVisible == true) return super.dispatchTouchEvent(ev)
         touchHelper.dispatchTouchEvent(ev)
         if (!viewBinding.timerControl.hasGlobalPoint(ev.rawX.toInt(), ev.rawY.toInt())) {
             scrollTimer.onTouchEvent(ev)
@@ -613,8 +699,11 @@ class ReaderActivity :
 
     private fun setKeepScreenOn(isKeep: Boolean) {
         if (isKeep) {
+            isBedtimeSleepGuardTriggered = false
+            lastTouchElapsedMs = SystemClock.elapsedRealtime()
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         } else {
+            isBedtimeSleepGuardTriggered = false
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
@@ -655,7 +744,9 @@ class ReaderActivity :
             viewBinding.toolbarDocked?.isVisible = isUiVisible
             viewBinding.infoBar.isGone = isUiVisible || (!viewModel.isInfoBarEnabled.value)
             viewBinding.infoBar.isTimeVisible = isFullscreen
+            isUiVisibleFlow.value = isUiVisible
             updateScrollTimerButton()
+            updateZoomAndScrubberVisibility()
             updateTimerPanelOffset(animate = isAnimated)
             systemUiController.setSystemUiVisible(isUiVisible || !isFullscreen)
             if (!isAnimated) {
@@ -668,6 +759,17 @@ class ReaderActivity :
         gestureInsets = insets.getInsets(WindowInsetsCompat.Type.systemGestures())
         val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
         val tappableInsets = insets.getInsets(WindowInsetsCompat.Type.tappableElement())
+        currentSystemBars = systemBars
+        val rootInsets = ViewCompat.getRootWindowInsets(v)
+        visibleNavBottomPxFlow.value = rootInsets
+            ?.getInsets(WindowInsetsCompat.Type.navigationBars())?.bottom
+            ?: 0
+        viewBinding.zoomControl.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+            val density = resources.displayMetrics.density
+            bottomMargin = tappableInsets.bottom + (84f * density).roundToInt()
+            marginEnd = systemBars.right + (12f * density).roundToInt()
+        }
+        updateVerticalScrubberLayout()
         viewBinding.toolbar.updateLayoutParams<ViewGroup.MarginLayoutParams> {
             topMargin = systemBars.top
             rightMargin = systemBars.right
@@ -866,6 +968,30 @@ class ReaderActivity :
             chapterTitle != previous?.getChapterTitle(resources) &&
             chapterTitle.isNotEmpty()
         ) {
+            if (previous != null &&
+                previous.chapter.id != uiState.chapter.id &&
+                viewModel.isChapterTransitionsEnabled.value &&
+                !uiState.isEpub
+            ) {
+                val prevTitle = previous.getChapterTitle(resources).ifEmpty { previous.chapter.title.orEmpty() }
+                val prevNum = NekoChapterCanonicalizer.parseChapterNumber(
+                    uiState.mangaName.orEmpty(),
+                    previous.chapter.title,
+                    previous.chapter.number,
+                )
+                val currNum = NekoChapterCanonicalizer.parseChapterNumber(
+                    uiState.mangaName.orEmpty(),
+                    uiState.chapter.title,
+                    uiState.chapter.number,
+                )
+                val gap = if (prevNum >= 0f && currNum >= 0f) abs(currNum - prevNum) else null
+                chapterTransitionFlow.value = ChapterTransitionBannerState(
+                    previousChapterTitle = prevTitle,
+                    nextChapterTitle = chapterTitle,
+                    missingChaptersGap = gap,
+                )
+                chapterTransitionOverlay?.isVisible = true
+            }
             viewBinding.toastView.showTemporary(chapterTitle, TOAST_DURATION)
         }
         if (uiState.isSliderAvailable()) {
@@ -879,6 +1005,7 @@ class ReaderActivity :
         viewBinding.actionsView.isSliderEnabled = uiState.isSliderAvailable()
         viewBinding.actionsView.isNextEnabled = uiState.hasNextChapter()
         viewBinding.actionsView.isPrevEnabled = uiState.hasPreviousChapter()
+        updateZoomAndScrubberVisibility()
     }
 
     /**
@@ -983,6 +1110,215 @@ class ReaderActivity :
             .launchIn(lifecycleScope)
     }
 
+    private fun setupPhase4HudOverlays() {
+        val density = resources.displayMetrics.density
+
+        // 1. Passive HUD layer (100% touch passthrough): Warm Amber / Night Dimmer + Bottom-Center Page Counter
+        val passiveCompose = ComposeView(this@ReaderActivity).apply {
+            isClickable = false
+            isFocusable = false
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                DropSauceTheme {
+                    val uiState by viewModel.uiState.collectAsState()
+                    val showPageNumbers by viewModel.isPagesNumbersEnabled.collectAsState()
+                    val isUiOpen by isUiVisibleFlow.collectAsState()
+                    val bottomInsetPx by visibleNavBottomPxFlow.collectAsState()
+                    val warmAmberEnabled by viewModel.isWarmAmberEnabled.collectAsState()
+                    val warmAmberWarmth by viewModel.warmAmberWarmth.collectAsState()
+                    val nightDimmerAlpha by viewModel.nightDimmerAlpha.collectAsState()
+
+                    ReaderPassiveHudOverlay(
+                        uiState = uiState,
+                        isPagesNumbersEnabled = showPageNumbers,
+                        isBottomToolbarVisible = isUiOpen && viewBinding.toolbarDocked != null,
+                        bottomSystemInsetPx = bottomInsetPx,
+                        isWarmAmberEnabled = warmAmberEnabled,
+                        warmAmberWarmth = warmAmberWarmth,
+                        nightDimmerAlpha = nightDimmerAlpha,
+                    )
+                }
+            }
+        }
+        val passive = object : FrameLayout(this@ReaderActivity) {
+            override fun dispatchTouchEvent(ev: MotionEvent?): Boolean = false
+            override fun addTouchables(views: ArrayList<View>?) = Unit
+        }.apply {
+            isClickable = false
+            isFocusable = false
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            addView(
+                passiveCompose,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                ),
+            )
+        }
+        passiveHudOverlay = passive
+        val containerIndex = viewBinding.root.indexOfChild(viewBinding.container).coerceAtLeast(0)
+        viewBinding.root.addView(
+            passive,
+            containerIndex + 1,
+            CoordinatorLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
+        )
+
+        // 2. Interactive 3-Position Vertical Scrubber (LEFT / RIGHT)
+        val scrubber = ComposeView(this).apply {
+            isVisible = false
+            elevation = 8f * density
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                DropSauceTheme {
+                    val uiState by viewModel.uiState.collectAsState()
+                    val position by viewModel.scrubberPosition.collectAsState()
+                    if (position != ReaderScrubberPosition.BOTTOM) {
+                        ReaderVerticalScrubberCapsule(
+                            uiState = uiState,
+                            position = position,
+                            isSliderSmooth = uiState?.let { it.isEpub && !it.isEpubPaged } == true,
+                            onSelectPage = ::switchPageTo,
+                            onPrevChapter = { switchChapterBy(-1) },
+                            onNextChapter = { switchChapterBy(1) },
+                        )
+                    }
+                }
+            }
+        }
+        verticalScrubberOverlay = scrubber
+        viewBinding.root.addView(
+            scrubber,
+            CoordinatorLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            },
+        )
+        updateVerticalScrubberLayout()
+
+        // 3. Chapter Transition Interstitial Card (when Show Chapter Transitions is ON)
+        val transitionCard = ComposeView(this).apply {
+            isVisible = false
+            translationZ = 48f * density
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                DropSauceTheme {
+                    val bannerState by chapterTransitionFlow.collectAsState()
+                    ReaderChapterTransitionOverlay(
+                        state = bannerState,
+                        onDismiss = ::dismissChapterTransitionOverlay,
+                    )
+                }
+            }
+        }
+        chapterTransitionOverlay = transitionCard
+        viewBinding.root.addView(
+            transitionCard,
+            CoordinatorLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
+        )
+    }
+
+    private fun dismissChapterTransitionOverlay() {
+        chapterTransitionFlow.value = null
+        chapterTransitionOverlay?.isVisible = false
+        updateZoomAndScrubberVisibility()
+    }
+
+    private fun hasOpenSheetOrModal(): Boolean {
+        val hasDialogFragment = supportFragmentManager.fragments.any { fragment ->
+            fragment is DialogFragment && fragment.isAdded && !fragment.isHidden
+        }
+        val hasInlinePanel = viewBinding.timerControl.isVisible ||
+            viewBinding.ttsControl.isVisible ||
+            viewModel.isEyeReminderVisible.value ||
+            chapterTransitionFlow.value != null
+        val lostWindowFocusToDialog = isResumedSafe() && !hasWindowFocus()
+        return hasDialogFragment || hasInlinePanel || lostWindowFocusToDialog
+    }
+
+    private fun isResumedSafe(): Boolean = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+
+    private fun updateZoomAndScrubberVisibility() {
+        val modalOpen = hasOpenSheetOrModal()
+        val shouldShowZoom = isZoomWanted && !modalOpen
+        if (viewBinding.zoomControl.isVisible != shouldShowZoom) {
+            viewBinding.zoomControl.isVisible = shouldShowZoom
+            updateVerticalScrubberLayout()
+        }
+        val pos = viewModel.scrubberPosition.value
+        val sliderAvailable = viewModel.uiState.value?.isSliderAvailable() == true
+        verticalScrubberOverlay?.isVisible = pos != ReaderScrubberPosition.BOTTOM &&
+            viewBinding.appbarTop.isVisible &&
+            !modalOpen &&
+            sliderAvailable
+    }
+
+    private fun updateVerticalScrubberLayout() {
+        val scrubber = verticalScrubberOverlay ?: return
+        val pos = viewModel.scrubberPosition.value
+        val density = resources.displayMetrics.density
+        val sidePad = (12f * density).roundToInt()
+        scrubber.updateLayoutParams<CoordinatorLayout.LayoutParams> {
+            gravity = when (pos) {
+                ReaderScrubberPosition.LEFT -> Gravity.CENTER_VERTICAL or Gravity.START
+                else -> Gravity.CENTER_VERTICAL or Gravity.END
+            }
+            leftMargin = if (pos == ReaderScrubberPosition.LEFT) currentSystemBars.left + sidePad else 0
+            rightMargin = if (pos == ReaderScrubberPosition.RIGHT) currentSystemBars.right + sidePad else 0
+            // Clear the bottom-right Zoom capsule when both are docked on the right
+            bottomMargin = if (pos == ReaderScrubberPosition.RIGHT && viewBinding.zoomControl.isVisible) {
+                (76f * density).roundToInt()
+            } else {
+                0
+            }
+        }
+    }
+
+    private fun setupBedtimeSleepGuard() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                while (true) {
+                    delay(BEDTIME_GUARD_CHECK_INTERVAL_MS)
+                    if (!viewModel.isKeepScreenOnEnabled.value ||
+                        !viewModel.isBedtimeSleepGuardEnabled.value ||
+                        isBedtimeSleepGuardTriggered ||
+                        scrollTimer.isActive.value ||
+                        tts.isPlaying.value
+                    ) {
+                        lastTouchElapsedMs = SystemClock.elapsedRealtime()
+                        continue
+                    }
+                    val idleMs = SystemClock.elapsedRealtime() - lastTouchElapsedMs
+                    if (idleMs >= BEDTIME_SLEEP_GUARD_TIMEOUT_MS) {
+                        isBedtimeSleepGuardTriggered = true
+                        viewModel.saveBedtimeSleepGuardSpot(readerManager.currentReader?.getCurrentState())
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun restoreFromBedtimeSleepGuard() {
+        isBedtimeSleepGuardTriggered = false
+        lastTouchElapsedMs = SystemClock.elapsedRealtime()
+        if (viewModel.isKeepScreenOnEnabled.value) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+        viewBinding.toastView.showTemporary(
+            getString(R.string.bedtime_sleep_guard_saved_toast),
+            3200L,
+        )
+    }
+
     private fun askForIncognitoMode() {
         showIncognitoModeDialog(
             activity = this,
@@ -994,9 +1330,12 @@ class ReaderActivity :
     companion object {
 
         private const val TOAST_DURATION = 2000L
+        private const val TOAST_DURATION_LONG = 2600L
         private const val FAB_FADE_DURATION = 200L
         // matches androidx.transition's default duration, so the panel and the toolbar move together
         private const val PANEL_SLIDE_DURATION = 300L
+        private const val BEDTIME_SLEEP_GUARD_TIMEOUT_MS = 15L * 60L * 1000L
+        private const val BEDTIME_GUARD_CHECK_INTERVAL_MS = 5_000L
 		private const val EPUB_MODE_SCROLL = "scroll"
 
         private const val TOP_READER_BAR_ALPHA = 0.7f

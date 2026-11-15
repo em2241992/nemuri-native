@@ -24,6 +24,7 @@ import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.ReaderControl
+import org.koitharu.kotatsu.core.prefs.ReaderScrubberPosition
 import org.koitharu.kotatsu.core.util.ext.HapticEffect
 import org.koitharu.kotatsu.core.util.ext.hapticFeedback
 import org.koitharu.kotatsu.core.util.ext.getThemeColor
@@ -247,7 +248,8 @@ class ReaderActionsView @JvmOverloads constructor(
 
 	override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
 		when (key) {
-			AppSettings.KEY_READER_CONTROLS -> updateControlsVisibility()
+			AppSettings.KEY_READER_CONTROLS,
+			AppSettings.KEY_READER_SCRUBBER_POSITION -> updateControlsVisibility()
 			AppSettings.KEY_PAGES_TAB,
 			AppSettings.KEY_DETAILS_TAB,
 			AppSettings.KEY_DETAILS_LAST_TAB -> updatePagesSheetButton()
@@ -285,7 +287,8 @@ class ReaderActionsView @JvmOverloads constructor(
 		binding.buttonTimer.isVisible = ReaderControl.TIMER in controls
 		binding.buttonBookmark.isVisible = ReaderControl.BOOKMARK in controls
 		binding.buttonOptions.isVisible = isLandscape
-		binding.slider.isVisible = ReaderControl.SLIDER in controls
+		binding.slider.isVisible = (ReaderControl.SLIDER in controls) &&
+			settings.readerScrubberPosition == ReaderScrubberPosition.BOTTOM
 		// bringChildToFront moves a child to the end of the child list, so walking the ordered
 		// list left to right leaves the children in exactly that order. Options stays pinned last.
 		for (control in controls) {

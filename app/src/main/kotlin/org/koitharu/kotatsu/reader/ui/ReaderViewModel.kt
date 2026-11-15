@@ -39,6 +39,7 @@ import org.koitharu.kotatsu.core.parser.MangaDataRepository
 import org.koitharu.kotatsu.core.parser.MangaRepository
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.ReaderMode
+import org.koitharu.kotatsu.core.prefs.ReaderScrubberPosition
 import org.koitharu.kotatsu.core.prefs.TriStateOption
 import org.koitharu.kotatsu.core.prefs.observeAsFlow
 import org.koitharu.kotatsu.core.prefs.observeAsStateFlow
@@ -135,6 +136,7 @@ class ReaderViewModel @Inject constructor(
     val onLoadingError = MutableEventFlow<Throwable>()
     val onShowToast = MutableEventFlow<Int>()
     val onFailoverSource = silentFailoverLoader.onFailoverSource
+    val onSkippedDuplicateChapter = MutableEventFlow<String>()
     val onAskNsfwIncognito = MutableEventFlow<Unit>()
     val uiState = MutableStateFlow<ReaderUiState?>(null)
 
@@ -167,10 +169,64 @@ class ReaderViewModel @Inject constructor(
         valueProducer = { isReaderKeepScreenOn },
     )
 
+    val isPagesNumbersEnabled = settings.observeAsStateFlow(
+        scope = viewModelScope + Dispatchers.Default,
+        key = AppSettings.KEY_PAGES_NUMBERS,
+        valueProducer = { isPagesNumbersEnabled },
+    )
+
+    val scrubberPosition = settings.observeAsStateFlow(
+        scope = viewModelScope + Dispatchers.Default,
+        key = AppSettings.KEY_READER_SCRUBBER_POSITION,
+        valueProducer = { readerScrubberPosition },
+    )
+
+    val isBedtimeSleepGuardEnabled = settings.observeAsStateFlow(
+        scope = viewModelScope + Dispatchers.Default,
+        key = AppSettings.KEY_READER_BEDTIME_SLEEP_GUARD,
+        valueProducer = { isReaderBedtimeSleepGuardEnabled },
+    )
+
+    val isWarmAmberEnabled = settings.observeAsStateFlow(
+        scope = viewModelScope + Dispatchers.Default,
+        key = AppSettings.KEY_READER_WARM_AMBER_ENABLED,
+        valueProducer = { isReaderWarmAmberEnabled },
+    )
+
+    val warmAmberWarmth = settings.observeAsStateFlow(
+        scope = viewModelScope + Dispatchers.Default,
+        key = AppSettings.KEY_READER_WARM_AMBER_WARMTH,
+        valueProducer = { readerWarmAmberWarmth },
+    )
+
+    val nightDimmerAlpha = settings.observeAsStateFlow(
+        scope = viewModelScope + Dispatchers.Default,
+        key = AppSettings.KEY_READER_NIGHT_DIMMER_ALPHA,
+        valueProducer = { readerNightDimmerAlpha },
+    )
+
+    val isChapterTransitionsEnabled = settings.observeAsStateFlow(
+        scope = viewModelScope + Dispatchers.Default,
+        key = AppSettings.KEY_READER_CHAPTER_TRANSITIONS,
+        valueProducer = { isReaderChapterTransitionsEnabled },
+    )
+
+    val isSkipDuplicateChaptersEnabled = settings.observeAsStateFlow(
+        scope = viewModelScope + Dispatchers.Default,
+        key = AppSettings.KEY_READER_SKIP_DUPLICATE_CHAPTERS,
+        valueProducer = { isReaderSkipDuplicateChaptersEnabled },
+    )
+
     val isWebtoonGapsEnabled = settings.observeAsStateFlow(
         scope = viewModelScope + Dispatchers.Default,
         key = AppSettings.KEY_WEBTOON_GAPS,
         valueProducer = { isWebtoonGapsEnabled },
+    )
+
+    val isWebtoonSmartSeamStitchEnabled = settings.observeAsStateFlow(
+        scope = viewModelScope + Dispatchers.Default,
+        key = AppSettings.KEY_WEBTOON_SMART_SEAM_STITCH,
+        valueProducer = { isWebtoonSmartSeamStitchEnabled },
     )
 
     val isWebtoonPullGestureEnabled = settings.observeAsStateFlow(
@@ -276,6 +332,39 @@ class ReaderViewModel @Inject constructor(
         )
     }
 
+    fun saveBedtimeSleepGuardSpot(state: ReaderState? = null) {
+        saveCurrentState(state)
+        if (isIncognitoMode.value != false || isPeekMode.value) {
+            return
+        }
+        val readerState = state ?: readingState.value ?: return
+        launchJob(Dispatchers.Default) {
+            val currentManga = getMangaOrNull() ?: return@launchJob
+            val existing = bookmarksRepository.observeBookmark(
+                currentManga,
+                readerState.chapterId,
+                readerState.page,
+            ).first()
+            if (existing == null) {
+                val page = content.value.pages.find {
+                    it.chapterId == readerState.chapterId && it.index == readerState.page
+                }?.toMangaPage() ?: return@launchJob
+                bookmarksRepository.addBookmark(
+                    Bookmark(
+                        manga = currentManga,
+                        pageId = page.id,
+                        chapterId = readerState.chapterId,
+                        page = readerState.page,
+                        scroll = readerState.scroll,
+                        imageUrl = page.preview.ifNullOrEmpty { page.url },
+                        createdAt = Instant.now(),
+                        percent = computePercent(readerState),
+                    ),
+                )
+            }
+        }
+    }
+
     fun getCurrentState() = readingState.value
 
     fun getCurrentChapterPages(): List<MangaPage>? {
@@ -337,14 +426,25 @@ class ReaderViewModel @Inject constructor(
         loadingJob = launchLoadingJob(Dispatchers.Default) {
             prevJob?.cancelAndJoin()
             val prevState = readingState.requireValue()
+            var skippedLabel: String? = null
             val newChapterId = if (delta != 0) {
-                val allChapters = mangaDetails.requireValue().allChapters
-                var index = allChapters.indexOfFirst { x -> x.id == prevState.chapterId }
-                if (index < 0) {
-                    return@launchLoadingJob
+                val details = mangaDetails.requireValue()
+                var currentId = prevState.chapterId
+                val steps = kotlin.math.abs(delta)
+                val isNext = delta > 0
+                repeat(steps) {
+                    val step = chaptersLoader.resolveAdjacentChapter(
+                        manga = details,
+                        currentId = currentId,
+                        isNext = isNext,
+                    )
+                    val target = step.chapter ?: return@launchLoadingJob
+                    if (skippedLabel == null && step.skippedDuplicateLabel != null) {
+                        skippedLabel = step.skippedDuplicateLabel
+                    }
+                    currentId = target.id
                 }
-                index += delta
-                (allChapters.getOrNull(index) ?: return@launchLoadingJob).id
+                currentId
             } else {
                 prevState.chapterId
             }
@@ -359,6 +459,9 @@ class ReaderViewModel @Inject constructor(
             )
             content.value = ReaderContent(chaptersLoader.snapshot(), newState)
             saveCurrentState(newState)
+            skippedLabel?.let { label ->
+                onSkippedDuplicateChapter.call(label)
+            }
         }
     }
 
@@ -555,8 +658,15 @@ class ReaderViewModel @Inject constructor(
         val prevJob = loadingJob
         loadingJob = launchLoadingJob(Dispatchers.Default) {
             prevJob?.join()
-            chaptersLoader.loadPrevNextChapter(mangaDetails.requireValue(), currentId, isNext)
+            val stepResult = chaptersLoader.loadPrevNextChapterWithStep(
+                mangaDetails.requireValue(),
+                currentId,
+                isNext,
+            )
             content.value = ReaderContent(chaptersLoader.snapshot(), null)
+            stepResult.skippedDuplicateLabel?.let { label ->
+                onSkippedDuplicateChapter.call(label)
+            }
         }
     }
 

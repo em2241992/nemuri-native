@@ -26,14 +26,13 @@
 
 	<org.koitharu.kotatsu.core.ui.widgets.ZoomControl
 		android:id="@+id/zoomControl"
-		android:layout_width="wrap_content"
+		android:layout_width="40dp"
 		android:layout_height="wrap_content"
 		android:layout_gravity="bottom|end"
-		android:layout_margin="16dp"
+		android:layout_marginEnd="12dp"
+		android:layout_marginBottom="84dp"
 		android:orientation="vertical"
-		android:spacing="2dp"
 		android:visibility="gone"
-		app:layout_dodgeInsetEdges="bottom"
 		tools:visibility="visible" />
 
 	<org.koitharu.kotatsu.reader.ui.ReaderInfoBarView

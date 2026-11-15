@@ -65,7 +65,8 @@ open class PageHolder(
 
 	override fun onConfigChanged(settings: ReaderSettings) {
 		super.onConfigChanged(settings)
-		binding.textViewNumber.isVisible = settings.isPagesNumbersEnabled
+		// Page counter is now rendered unified at Bottom-Center in ReaderActivity HUD overlay
+		binding.textViewNumber.isVisible = false
 	}
 
 	@SuppressLint("SetTextI18n")

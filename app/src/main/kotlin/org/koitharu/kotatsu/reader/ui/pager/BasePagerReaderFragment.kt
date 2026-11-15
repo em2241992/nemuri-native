@@ -104,6 +104,10 @@ abstract class BasePagerReaderFragment : BaseReaderFragment<FragmentReaderPagerB
 		(viewBinding?.pager?.findCurrentViewHolder() as? PageHolder)?.onZoomOut()
 	}
 
+	override fun isReaderScrollIdle(): Boolean {
+		return viewBinding?.pager?.scrollState == ViewPager2.SCROLL_STATE_IDLE
+	}
+
 	override fun onGenericMotion(v: View?, event: MotionEvent): Boolean {
 		if (event.source and InputDevice.SOURCE_CLASS_POINTER != 0) {
 			if (event.actionMasked == MotionEvent.ACTION_SCROLL) {

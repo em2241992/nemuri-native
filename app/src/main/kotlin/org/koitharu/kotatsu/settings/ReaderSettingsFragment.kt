@@ -26,8 +26,10 @@ import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.ReaderAnimation
 import org.koitharu.kotatsu.core.prefs.ReaderBackground
 import org.koitharu.kotatsu.core.prefs.ReaderMode
+import org.koitharu.kotatsu.core.prefs.ReaderScrubberPosition
 import org.koitharu.kotatsu.core.ui.util.ActivityRecreationHandle
 import javax.inject.Inject
+import kotlin.math.roundToInt
 import org.koitharu.kotatsu.parsers.util.names
 import org.koitharu.kotatsu.settings.reader.ReaderBarSettingsFragment
 import org.koitharu.kotatsu.settings.compose.ActionSettingsItem
@@ -37,11 +39,13 @@ import org.koitharu.kotatsu.settings.compose.DropSauceTheme
 import org.koitharu.kotatsu.settings.compose.ListSettingsItem
 import org.koitharu.kotatsu.settings.compose.NavigationSettingsItem
 import org.koitharu.kotatsu.settings.compose.MultiSelectSettingsItem
+import org.koitharu.kotatsu.settings.compose.SegmentedSettingsItem
 import org.koitharu.kotatsu.settings.compose.SettingsGroup
 import org.koitharu.kotatsu.settings.compose.SettingsScaffold
 import org.koitharu.kotatsu.settings.compose.SliderSettingsItem
 import org.koitharu.kotatsu.settings.compose.SwitchSettingsItem
 import org.koitharu.kotatsu.settings.compose.rememberBooleanPref
+import org.koitharu.kotatsu.settings.compose.rememberFloatPref
 import org.koitharu.kotatsu.settings.compose.rememberIntPref
 import org.koitharu.kotatsu.settings.compose.rememberStringPref
 import org.koitharu.kotatsu.settings.compose.rememberStringSetPref
@@ -141,6 +145,29 @@ private fun ReaderScreen(
 	var pagesNumbers by rememberBooleanPref(AppSettings.KEY_PAGES_NUMBERS, false)
 	var titleTapToRead by rememberBooleanPref(AppSettings.KEY_TITLE_TAP_TO_READ, false)
 	var checkDuplicates by rememberBooleanPref(AppSettings.KEY_CHECK_DUPLICATES, true)
+	var scrubberPosition by rememberStringPref(
+		AppSettings.KEY_READER_SCRUBBER_POSITION,
+		ReaderScrubberPosition.RIGHT.name,
+	)
+	var smartSeamStitch by rememberBooleanPref(AppSettings.KEY_WEBTOON_SMART_SEAM_STITCH, true)
+	var showChapterTransitions by rememberBooleanPref(AppSettings.KEY_READER_CHAPTER_TRANSITIONS, true)
+	var skipDuplicateChapters by rememberBooleanPref(AppSettings.KEY_READER_SKIP_DUPLICATE_CHAPTERS, true)
+	var bedtimeSleepGuard by rememberBooleanPref(AppSettings.KEY_READER_BEDTIME_SLEEP_GUARD, true)
+	var warmAmberEnabled by rememberBooleanPref(AppSettings.KEY_READER_WARM_AMBER_ENABLED, false)
+	var warmAmberWarmth by rememberFloatPref(AppSettings.KEY_READER_WARM_AMBER_WARMTH, 0.40f)
+	var nightDimmerAlpha by rememberFloatPref(AppSettings.KEY_READER_NIGHT_DIMMER_ALPHA, 0.20f)
+	val scrubberOptions = remember {
+		listOf(
+			ReaderScrubberPosition.RIGHT,
+			ReaderScrubberPosition.LEFT,
+			ReaderScrubberPosition.BOTTOM,
+		)
+	}
+	val scrubberLabels = listOf(
+		stringResource(R.string.reader_scrubber_right),
+		stringResource(R.string.reader_scrubber_left),
+		stringResource(R.string.reader_scrubber_bottom),
+	)
 
 	val isWebtoonMode = readerMode == ReaderMode.WEBTOON.name
 
@@ -258,11 +285,52 @@ private fun ReaderScreen(
 						shape = pos.shape,
 					)
 				}
+				item { pos ->
+					SwitchSettingsItem(
+						title = stringResource(R.string.webtoon_smart_seam_stitch),
+						subtitle = stringResource(R.string.webtoon_smart_seam_stitch_summary),
+						checked = smartSeamStitch,
+						onCheckedChange = { smartSeamStitch = it },
+						icon = R.drawable.ic_reader_webtoon,
+						shape = pos.shape,
+					)
+				}
 			}
 		}
 		item { Spacer(Modifier.height(8.dp).fillMaxWidth()) }
 		item {
 			SettingsGroup(title = "Controls") {
+				item { pos ->
+					SegmentedSettingsItem(
+						title = stringResource(R.string.reader_scrubber_position),
+						subtitle = stringResource(R.string.reader_scrubber_position_summary),
+						labels = scrubberLabels,
+						selectedIndex = scrubberOptions.indexOfFirst { it.name == scrubberPosition }.coerceAtLeast(0),
+						onSelected = { idx -> scrubberPosition = scrubberOptions[idx].name },
+						icon = R.drawable.ic_move_horizontal,
+						shape = pos.shape,
+					)
+				}
+				item { pos ->
+					SwitchSettingsItem(
+						title = stringResource(R.string.reader_show_chapter_transitions),
+						subtitle = stringResource(R.string.reader_show_chapter_transitions_summary),
+						checked = showChapterTransitions,
+						onCheckedChange = { showChapterTransitions = it },
+						icon = R.drawable.ic_action_skip,
+						shape = pos.shape,
+					)
+				}
+				item { pos ->
+					SwitchSettingsItem(
+						title = stringResource(R.string.reader_skip_duplicate_chapters),
+						subtitle = stringResource(R.string.reader_skip_duplicate_chapters_summary),
+						checked = skipDuplicateChapters,
+						onCheckedChange = { skipDuplicateChapters = it },
+						icon = R.drawable.ic_duplicate,
+						shape = pos.shape,
+					)
+				}
 				item { pos ->
 					NavigationSettingsItem(
 						title = stringResource(R.string.reader_controls_in_bottom_bar),
@@ -426,6 +494,55 @@ private fun ReaderScreen(
 						icon = R.drawable.ic_eye,
 						
 						shape = pos.shape,
+					)
+				}
+				item { pos ->
+					SwitchSettingsItem(
+						title = stringResource(R.string.reader_bedtime_sleep_guard),
+						subtitle = stringResource(R.string.reader_bedtime_sleep_guard_summary),
+						checked = bedtimeSleepGuard,
+						onCheckedChange = { bedtimeSleepGuard = it },
+						icon = R.drawable.ic_timer,
+						shape = pos.shape,
+						enabled = readerScreenOn,
+					)
+				}
+				item { pos ->
+					SwitchSettingsItem(
+						title = stringResource(R.string.reader_warm_amber_dimmer),
+						subtitle = stringResource(R.string.reader_warm_amber_dimmer_summary),
+						checked = warmAmberEnabled,
+						onCheckedChange = { warmAmberEnabled = it },
+						icon = R.drawable.ic_appearance,
+						shape = pos.shape,
+					)
+				}
+				item { pos ->
+					SliderSettingsItem(
+						title = stringResource(R.string.reader_warm_amber_warmth),
+						value = (warmAmberWarmth * 100f).roundToInt(),
+						valueFrom = 0,
+						valueTo = 100,
+						stepSize = 5,
+						unitSuffix = "%",
+						onValueChange = { warmAmberWarmth = it / 100f },
+						icon = R.drawable.ic_appearance,
+						shape = pos.shape,
+						enabled = warmAmberEnabled,
+					)
+				}
+				item { pos ->
+					SliderSettingsItem(
+						title = stringResource(R.string.reader_night_dimmer_level),
+						value = (nightDimmerAlpha * 100f).roundToInt(),
+						valueFrom = 0,
+						valueTo = 65,
+						stepSize = 5,
+						unitSuffix = "%",
+						onValueChange = { nightDimmerAlpha = it / 100f },
+						icon = R.drawable.ic_eye,
+						shape = pos.shape,
+						enabled = warmAmberEnabled,
 					)
 				}
 				item { pos ->

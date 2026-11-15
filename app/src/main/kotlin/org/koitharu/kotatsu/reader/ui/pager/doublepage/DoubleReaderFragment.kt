@@ -109,6 +109,10 @@ open class DoubleReaderFragment : BaseReaderFragment<FragmentReaderDoubleBinding
 			.forEach { it.onZoomOut() }
 	}
 
+	override fun isReaderScrollIdle(): Boolean {
+		return viewBinding?.recyclerView?.scrollState == RecyclerView.SCROLL_STATE_IDLE
+	}
+
 	override fun switchPageBy(delta: Int) {
 		if (delta.absoluteValue > 1 || !isAnimationEnabled()) {
 			switchPageTo(getCurrentItem() + delta + delta, false)

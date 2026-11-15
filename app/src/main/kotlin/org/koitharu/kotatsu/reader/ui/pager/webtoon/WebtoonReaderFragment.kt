@@ -13,6 +13,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.snackbar.Snackbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
@@ -57,6 +58,7 @@ class WebtoonReaderFragment : BaseReaderFragment<FragmentReaderWebtoonBinding>()
 	override fun onViewBindingCreated(binding: FragmentReaderWebtoonBinding, savedInstanceState: Bundle?) {
 		super.onViewBindingCreated(binding, savedInstanceState)
 		with(binding.recyclerView) {
+			itemAnimator = null
 			adapter = readerAdapter
 			addOnPageScrollListener(this@WebtoonReaderFragment)
 			recyclerLifecycleDispatcher = RecyclerViewLifecycleDispatcher().also {
@@ -70,12 +72,17 @@ class WebtoonReaderFragment : BaseReaderFragment<FragmentReaderWebtoonBinding>()
 		viewModel.defaultWebtoonZoomOut.take(1).observe(viewLifecycleOwner) {
 			binding.frame.zoom = 1f - it
 		}
-		viewModel.isWebtoonGapsEnabled.observe(viewLifecycleOwner) {
+		combine(
+			viewModel.isWebtoonGapsEnabled,
+			viewModel.isWebtoonSmartSeamStitchEnabled,
+			::Pair,
+		).observe(viewLifecycleOwner) { (gapsEnabled, smartStitchEnabled) ->
 			val rv = binding.recyclerView
 			rv.removeItemDecoration(WebtoonGapsDecoration::class.java)
-			if (it) {
-				rv.addItemDecoration(WebtoonGapsDecoration())
+			if (gapsEnabled) {
+				rv.addItemDecoration(WebtoonGapsDecoration(smartSeamAutoStitch = smartStitchEnabled))
 			}
+			rv.invalidateItemDecorations()
 		}
 		viewModel.readerSettingsProducer.observe(viewLifecycleOwner) {
 			it.applyBackground(binding.root)
@@ -98,6 +105,10 @@ class WebtoonReaderFragment : BaseReaderFragment<FragmentReaderWebtoonBinding>()
 		recyclerLifecycleDispatcher = null
 		requireViewBinding().recyclerView.adapter = null
 		super.onDestroyView()
+	}
+
+	override fun isReaderScrollIdle(): Boolean {
+		return viewBinding?.recyclerView?.scrollState == RecyclerView.SCROLL_STATE_IDLE
 	}
 
 	override fun onApplyWindowInsets(v: View, insets: WindowInsetsCompat): WindowInsetsCompat {

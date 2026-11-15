@@ -412,8 +412,21 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		get() = prefs.getInt(KEY_EPUB_CUSTOM_FONT_REVISION, 0)
 		set(value) = prefs.edit { putInt(KEY_EPUB_CUSTOM_FONT_REVISION, value) }
 
-	val isReaderZoomButtonsEnabled: Boolean
+	var isReaderZoomButtonsEnabled: Boolean
 		get() = prefs.getBoolean(KEY_READER_ZOOM_BUTTONS, false)
+		set(value) = prefs.edit { putBoolean(KEY_READER_ZOOM_BUTTONS, value) }
+
+	var readerScrubberPosition: ReaderScrubberPosition
+		get() = prefs.getEnumValue(KEY_READER_SCRUBBER_POSITION, ReaderScrubberPosition.RIGHT)
+		set(value) = prefs.edit { putEnumValue(KEY_READER_SCRUBBER_POSITION, value) }
+
+	var isReaderChapterTransitionsEnabled: Boolean
+		get() = prefs.getBoolean(KEY_READER_CHAPTER_TRANSITIONS, true)
+		set(value) = prefs.edit { putBoolean(KEY_READER_CHAPTER_TRANSITIONS, value) }
+
+	var isReaderSkipDuplicateChaptersEnabled: Boolean
+		get() = prefs.getBoolean(KEY_READER_SKIP_DUPLICATE_CHAPTERS, true)
+		set(value) = prefs.edit { putBoolean(KEY_READER_SKIP_DUPLICATE_CHAPTERS, value) }
 
 	val isReaderControlAlwaysLTR: Boolean
 		get() = prefs.getBoolean(KEY_READER_CONTROL_LTR, false)
@@ -861,8 +874,9 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 	}
 
 
-	val isPagesNumbersEnabled: Boolean
+	var isPagesNumbersEnabled: Boolean
 		get() = prefs.getBoolean(KEY_PAGES_NUMBERS, false)
+		set(value) = prefs.edit { putBoolean(KEY_PAGES_NUMBERS, value) }
 
 	val screenshotsPolicy: ScreenshotsPolicy
 		get() = prefs.getEnumValue(KEY_SCREENSHOTS_POLICY, ScreenshotsPolicy.ALLOW)
@@ -931,8 +945,31 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 	val isReaderBarEnabled: Boolean
 		get() = prefs.getBoolean(KEY_READER_BAR, true)
 
-	val isReaderKeepScreenOn: Boolean
+	var isReaderKeepScreenOn: Boolean
 		get() = prefs.getBoolean(KEY_READER_SCREEN_ON, true)
+		set(value) = prefs.edit { putBoolean(KEY_READER_SCREEN_ON, value) }
+
+	var isReaderBedtimeSleepGuardEnabled: Boolean
+		get() = prefs.getBoolean(KEY_READER_BEDTIME_SLEEP_GUARD, true)
+		set(value) = prefs.edit { putBoolean(KEY_READER_BEDTIME_SLEEP_GUARD, value) }
+
+	var isReaderWarmAmberEnabled: Boolean
+		get() = prefs.getBoolean(KEY_READER_WARM_AMBER_ENABLED, false)
+		set(value) = prefs.edit { putBoolean(KEY_READER_WARM_AMBER_ENABLED, value) }
+
+	@get:FloatRange(from = 0.0, to = 1.0)
+	var readerWarmAmberWarmth: Float
+		get() = prefs.getFloat(KEY_READER_WARM_AMBER_WARMTH, 0.40f).coerceIn(0f, 1f)
+		set(@FloatRange(from = 0.0, to = 1.0) value) = prefs.edit {
+			putFloat(KEY_READER_WARM_AMBER_WARMTH, value.coerceIn(0f, 1f))
+		}
+
+	@get:FloatRange(from = 0.0, to = 0.65)
+	var readerNightDimmerAlpha: Float
+		get() = prefs.getFloat(KEY_READER_NIGHT_DIMMER_ALPHA, 0.20f).coerceIn(0f, 0.65f)
+		set(@FloatRange(from = 0.0, to = 0.65) value) = prefs.edit {
+			putFloat(KEY_READER_NIGHT_DIMMER_ALPHA, value.coerceIn(0f, 0.65f))
+		}
 
 	var readerColorFilter: ReaderColorFilter?
 		get() = runCatching {
@@ -1039,6 +1076,10 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 	var isWebtoonGapsEnabled: Boolean
 		get() = prefs.getBoolean(KEY_WEBTOON_GAPS, false)
 		set(value) = prefs.edit { putBoolean(KEY_WEBTOON_GAPS, value) }
+
+	var isWebtoonSmartSeamStitchEnabled: Boolean
+		get() = prefs.getBoolean(KEY_WEBTOON_SMART_SEAM_STITCH, true)
+		set(value) = prefs.edit { putBoolean(KEY_WEBTOON_SMART_SEAM_STITCH, value) }
 
 	var isWebtoonPullGestureEnabled: Boolean
 		get() = prefs.getBoolean(KEY_WEBTOON_PULL_GESTURE, false)
@@ -1405,6 +1446,14 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		const val KEY_FAVORITES_ORDER = "fav_order"
 		const val KEY_FAVORITES_PINNED = "fav_pinned_order_"
 		const val KEY_WEBTOON_GAPS = "webtoon_gaps"
+		const val KEY_WEBTOON_SMART_SEAM_STITCH = "webtoon_smart_seam_stitch"
+		const val KEY_READER_SCRUBBER_POSITION = "reader_scrubber_position"
+		const val KEY_READER_BEDTIME_SLEEP_GUARD = "reader_bedtime_sleep_guard"
+		const val KEY_READER_WARM_AMBER_ENABLED = "reader_warm_amber_enabled"
+		const val KEY_READER_WARM_AMBER_WARMTH = "reader_warm_amber_warmth"
+		const val KEY_READER_NIGHT_DIMMER_ALPHA = "reader_night_dimmer_alpha"
+		const val KEY_READER_CHAPTER_TRANSITIONS = "reader_chapter_transitions"
+		const val KEY_READER_SKIP_DUPLICATE_CHAPTERS = "reader_skip_duplicate_chapters"
 		const val KEY_WEBTOON_ZOOM = "webtoon_zoom"
 		const val KEY_WEBTOON_ZOOM_OUT = "webtoon_zoom_out"
 		const val KEY_WEBTOON_PULL_GESTURE = "webtoon_pull_gesture"

@@ -75,6 +75,8 @@ abstract class BaseReaderFragment<B : ViewBinding> : BaseFragment<B>(), ZoomCont
 
 	open fun scrollBy(delta: Int, smooth: Boolean): Boolean = false
 
+	open fun isReaderScrollIdle(): Boolean = true
+
 	abstract fun getCurrentState(): ReaderState?
 
 	protected abstract fun onCreateAdapter(): BaseReaderAdapter<*>?

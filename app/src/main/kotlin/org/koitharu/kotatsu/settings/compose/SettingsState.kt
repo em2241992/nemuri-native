@@ -36,6 +36,13 @@ fun rememberIntPref(key: String, defaultValue: Int): MutableState<Int> = remembe
 )
 
 @Composable
+fun rememberFloatPref(key: String, defaultValue: Float): MutableState<Float> = rememberPrefValue(
+	key = key,
+	read = { prefs -> prefs.getFloat(key, defaultValue) },
+	write = { prefs, value -> prefs.edit { putFloat(key, value) } },
+)
+
+@Composable
 fun rememberDetailsBackdropBlurPref(key: String, defaultValue: Int): MutableState<Int> = rememberPrefValue(
 	key = key,
 	read = { prefs ->

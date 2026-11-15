@@ -3,29 +3,39 @@
 	xmlns:android="http://schemas.android.com/apk/res/android"
 	xmlns:app="http://schemas.android.com/apk/res-auto"
 	xmlns:tools="http://schemas.android.com/tools"
-	android:layout_width="match_parent"
-	android:layout_height="match_parent"
+	android:layout_width="40dp"
+	android:layout_height="wrap_content"
 	tools:orientation="vertical"
-	tools:parentTag="com.google.android.material.button.MaterialButtonGroup">
+	tools:parentTag="android.widget.LinearLayout">
 
-	<com.google.android.material.button.MaterialButton
+	<ImageButton
 		android:id="@+id/button_zoom_in"
-		style="?materialIconButtonOutlinedStyle"
-		android:layout_width="wrap_content"
-		android:layout_height="wrap_content"
+		android:layout_width="40dp"
+		android:layout_height="40dp"
+		android:background="?attr/selectableItemBackgroundBorderless"
 		android:contentDescription="@string/zoom_in"
+		android:padding="9dp"
+		android:scaleType="fitCenter"
+		android:src="@drawable/ic_zoom_in"
 		android:tooltipText="@string/zoom_in"
-		app:backgroundTint="@color/bg_floating_button"
-		app:icon="@drawable/ic_zoom_in" />
+		app:tint="#F1F5F9" />
 
-	<com.google.android.material.button.MaterialButton
+	<View
+		android:layout_width="22dp"
+		android:layout_height="1dp"
+		android:layout_gravity="center_horizontal"
+		android:background="#26FFFFFF" />
+
+	<ImageButton
 		android:id="@+id/button_zoom_out"
-		style="?materialIconButtonOutlinedStyle"
-		android:layout_width="wrap_content"
-		android:layout_height="wrap_content"
+		android:layout_width="40dp"
+		android:layout_height="40dp"
+		android:background="?attr/selectableItemBackgroundBorderless"
 		android:contentDescription="@string/zoom_out"
+		android:padding="9dp"
+		android:scaleType="fitCenter"
+		android:src="@drawable/ic_zoom_out"
 		android:tooltipText="@string/zoom_out"
-		app:backgroundTint="@color/bg_floating_button"
-		app:icon="@drawable/ic_zoom_out" />
+		app:tint="#F1F5F9" />
 
 </merge>

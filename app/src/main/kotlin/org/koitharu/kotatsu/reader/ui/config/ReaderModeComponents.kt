@@ -40,6 +40,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.prefs.ReaderMode
+import org.koitharu.kotatsu.core.prefs.ReaderScrubberPosition
 import org.koitharu.kotatsu.core.ui.sheet.SheetSegment
 import org.koitharu.kotatsu.core.ui.sheet.SheetSegmentedSelector
 import kotlin.math.roundToInt
@@ -209,5 +210,306 @@ internal fun DoublePageConfigSection(
                 }
             }
         }
+    }
+}
+
+@Composable
+internal fun ScrubberAndHudConfigSection(
+    scrubberPosition: ReaderScrubberPosition,
+    onScrubberPositionChange: (ReaderScrubberPosition) -> Unit,
+    showPageNumbers: Boolean,
+    onShowPageNumbersChange: (Boolean) -> Unit,
+    showZoomButtons: Boolean,
+    onShowZoomButtonsChange: (Boolean) -> Unit,
+    showChapterTransitions: Boolean,
+    onShowChapterTransitionsChange: (Boolean) -> Unit,
+    skipDuplicateChapters: Boolean,
+    onSkipDuplicateChaptersChange: (Boolean) -> Unit,
+) {
+    val positions = listOf(
+        ReaderScrubberPosition.RIGHT to (R.string.reader_scrubber_right to R.drawable.ic_reader_ltr),
+        ReaderScrubberPosition.LEFT to (R.string.reader_scrubber_left to R.drawable.ic_reader_rtl),
+        ReaderScrubberPosition.BOTTOM to (R.string.reader_scrubber_bottom to R.drawable.ic_move_horizontal),
+    )
+    val selectedIndex = positions.indexOfFirst { it.first == scrubberPosition }.coerceAtLeast(0)
+
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+        ),
+        shadowElevation = 1.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.reader_scrubber_position),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                SheetSegmentedSelector(
+                    options = positions.map { (_, pair) ->
+                        SheetSegment(
+                            label = stringResource(pair.first),
+                            icon = painterResource(pair.second),
+                        )
+                    },
+                    selectedIndex = selectedIndex,
+                    onSelect = { idx -> onScrubberPositionChange(positions[idx].first) },
+                )
+            }
+
+            ConfigToggleRow(
+                iconRes = R.drawable.ic_title,
+                title = stringResource(R.string.show_pages_numbers),
+                checked = showPageNumbers,
+                onCheckedChange = onShowPageNumbersChange,
+            )
+
+            ConfigToggleRow(
+                iconRes = R.drawable.ic_zoom_in,
+                title = stringResource(R.string.reader_zoom_buttons),
+                checked = showZoomButtons,
+                onCheckedChange = onShowZoomButtonsChange,
+            )
+
+            ConfigToggleRow(
+                iconRes = R.drawable.ic_action_skip,
+                title = stringResource(R.string.reader_show_chapter_transitions),
+                checked = showChapterTransitions,
+                onCheckedChange = onShowChapterTransitionsChange,
+            )
+
+            ConfigToggleRow(
+                iconRes = R.drawable.ic_duplicate,
+                title = stringResource(R.string.reader_skip_duplicate_chapters),
+                checked = skipDuplicateChapters,
+                onCheckedChange = onSkipDuplicateChaptersChange,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun VerticalStripSeamSection(
+    isVerticalOrWebtoon: Boolean,
+    isGaplessVertical: Boolean,
+    onGaplessVerticalChange: (Boolean) -> Unit,
+    isSmartSeamStitch: Boolean,
+    onSmartSeamStitchChange: (Boolean) -> Unit,
+) {
+    val sectionAlpha = if (isVerticalOrWebtoon) 1f else 0.55f
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+        ),
+        shadowElevation = 1.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .alpha(sectionAlpha)
+                .padding(vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            ConfigToggleRow(
+                iconRes = R.drawable.ic_reader_webtoon,
+                title = stringResource(R.string.webtoon_gapless_vertical),
+                subtitle = stringResource(R.string.webtoon_gapless_vertical_summary),
+                checked = isGaplessVertical,
+                onCheckedChange = onGaplessVerticalChange,
+            )
+            ConfigToggleRow(
+                iconRes = R.drawable.ic_move_horizontal,
+                title = stringResource(R.string.webtoon_smart_seam_stitch),
+                subtitle = stringResource(R.string.webtoon_smart_seam_stitch_summary),
+                checked = isSmartSeamStitch,
+                onCheckedChange = onSmartSeamStitchChange,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun BedtimeComfortSection(
+    keepScreenOn: Boolean,
+    onKeepScreenOnChange: (Boolean) -> Unit,
+    bedtimeSleepGuard: Boolean,
+    onBedtimeSleepGuardChange: (Boolean) -> Unit,
+    warmAmberEnabled: Boolean,
+    onWarmAmberEnabledChange: (Boolean) -> Unit,
+    warmAmberWarmth: Float,
+    onWarmAmberWarmthChange: (Float) -> Unit,
+    nightDimmerAlpha: Float,
+    onNightDimmerAlphaChange: (Float) -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+        ),
+        shadowElevation = 1.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            ConfigToggleRow(
+                iconRes = R.drawable.ic_eye,
+                title = stringResource(R.string.keep_screen_on),
+                checked = keepScreenOn,
+                onCheckedChange = onKeepScreenOnChange,
+            )
+
+            ConfigToggleRow(
+                iconRes = R.drawable.ic_timer,
+                title = stringResource(R.string.reader_bedtime_sleep_guard),
+                subtitle = stringResource(R.string.reader_bedtime_sleep_guard_summary),
+                checked = bedtimeSleepGuard,
+                enabled = keepScreenOn,
+                onCheckedChange = onBedtimeSleepGuardChange,
+            )
+
+            ConfigToggleRow(
+                iconRes = R.drawable.ic_appearance,
+                title = stringResource(R.string.reader_warm_amber_dimmer),
+                subtitle = stringResource(R.string.reader_warm_amber_dimmer_summary),
+                checked = warmAmberEnabled,
+                onCheckedChange = onWarmAmberEnabledChange,
+            )
+
+            if (warmAmberEnabled) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.reader_warm_amber_warmth),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = "${(warmAmberWarmth * 100f).roundToInt()}%",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    Slider(
+                        value = warmAmberWarmth,
+                        onValueChange = onWarmAmberWarmthChange,
+                        valueRange = 0f..1f,
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.reader_night_dimmer_level),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = "${(nightDimmerAlpha * 100f).roundToInt()}%",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    Slider(
+                        value = nightDimmerAlpha,
+                        onValueChange = onNightDimmerAlphaChange,
+                        valueRange = 0f..0.65f,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConfigToggleRow(
+    iconRes: Int,
+    title: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    subtitle: String? = null,
+    enabled: Boolean = true,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .alpha(if (enabled) 1f else 0.38f)
+            .clickable(enabled = enabled) { onCheckedChange(!checked) }
+            .padding(horizontal = 20.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            painter = painterResource(iconRes),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(22.dp),
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (!subtitle.isNullOrBlank()) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            enabled = enabled,
+        )
     }
 }
