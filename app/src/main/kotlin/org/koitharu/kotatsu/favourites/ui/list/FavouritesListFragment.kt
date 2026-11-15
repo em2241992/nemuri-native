@@ -87,6 +87,12 @@ class FavouritesListFragment : MangaListFragment() {
 				true
 			}
 
+			R.id.action_favourite -> {
+				router.showFavoriteCategoriesDialog(selectedItems)
+				mode?.finish()
+				true
+			}
+
 			R.id.action_mark_current -> {
 				val itemsSnapshot = selectedItems
 				MaterialAlertDialogBuilder(context ?: return false)

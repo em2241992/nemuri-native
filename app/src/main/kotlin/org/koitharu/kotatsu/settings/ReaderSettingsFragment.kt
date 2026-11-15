@@ -23,11 +23,14 @@ import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.model.ZoomMode
 import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.core.prefs.AppSettings
+import org.koitharu.kotatsu.core.prefs.PageCounterPlacement
 import org.koitharu.kotatsu.core.prefs.ReaderAnimation
 import org.koitharu.kotatsu.core.prefs.ReaderBackground
 import org.koitharu.kotatsu.core.prefs.ReaderMode
 import org.koitharu.kotatsu.core.prefs.ReaderScrubberPosition
 import org.koitharu.kotatsu.core.prefs.ReaderUpscalePreset
+import org.koitharu.kotatsu.core.prefs.UpscaleComputeMode
+import org.koitharu.kotatsu.core.os.HardwareAcceleratorProbe
 import org.koitharu.kotatsu.core.ui.util.ActivityRecreationHandle
 import javax.inject.Inject
 import kotlin.math.roundToInt
@@ -140,6 +143,16 @@ private fun ReaderScreen(
 		stringResource(R.string.upscale_preset_bedtime_warm),
 	)
 	val upscalePresetValues = remember { ReaderUpscalePreset.entries.names().toList() }
+	var readerUpscaleComputeMode by rememberStringPref(
+		AppSettings.KEY_READER_UPSCALE_COMPUTE_MODE,
+		UpscaleComputeMode.AUTO.name,
+	)
+	val upscaleComputeOptions = remember { UpscaleComputeMode.entries }
+	val upscaleComputeLabels = listOf(
+		stringResource(R.string.upscale_compute_auto_short),
+		stringResource(R.string.upscale_compute_gpu_short),
+		stringResource(R.string.upscale_compute_cpu_short),
+	)
 	var readerCrop by rememberStringSetPref(AppSettings.KEY_READER_CROP, emptySet())
 	var readerFullscreen by rememberBooleanPref(AppSettings.KEY_READER_FULLSCREEN, true)
 	var readerOrientation by rememberStringPref(
@@ -149,6 +162,17 @@ private fun ReaderScreen(
 	var readerScreenOn by rememberBooleanPref(AppSettings.KEY_READER_SCREEN_ON, true)
 	var readerMultitask by rememberBooleanPref(AppSettings.KEY_READER_MULTITASK, false)
 	var readerBar by rememberBooleanPref(AppSettings.KEY_READER_BAR, true)
+	var pageCounterPlacement by rememberStringPref(
+		AppSettings.KEY_PAGE_COUNTER_PLACEMENT,
+		PageCounterPlacement.BOTTOM_CENTER.name,
+	)
+	val pageCounterOptions = remember { PageCounterPlacement.entries }
+	val pageCounterLabels = listOf(
+		stringResource(R.string.page_counter_bottom_center),
+		stringResource(R.string.page_counter_top_bar),
+		stringResource(R.string.page_counter_both),
+		stringResource(R.string.page_counter_hidden),
+	)
 	var chapterJumpDialog by rememberBooleanPref(AppSettings.KEY_CHAPTER_JUMP_DIALOG, true)
 	var readerBackground by rememberStringPref(
 		AppSettings.KEY_READER_BACKGROUND,
@@ -473,6 +497,20 @@ private fun ReaderScreen(
 					)
 				}
 				item { pos ->
+					val selectedComputeMode = upscaleComputeOptions.firstOrNull { it.name == readerUpscaleComputeMode }
+						?: UpscaleComputeMode.AUTO
+					val activeBackend = HardwareAcceleratorProbe.resolveUpscaleBackend(selectedComputeMode)
+					SegmentedSettingsItem(
+						title = stringResource(R.string.upscale_compute_title),
+						subtitle = "Active: ${activeBackend.badgeLabel}",
+						labels = upscaleComputeLabels,
+						selectedIndex = upscaleComputeOptions.indexOf(selectedComputeMode).coerceAtLeast(0),
+						onSelected = { idx -> readerUpscaleComputeMode = upscaleComputeOptions[idx].name },
+						icon = R.drawable.ic_sparkles,
+						shape = pos.shape,
+					)
+				}
+				item { pos ->
 					SwitchSettingsItem(
 						title = stringResource(R.string.reader_optimize),
 						subtitle = stringResource(R.string.reader_optimize_summary),
@@ -600,12 +638,21 @@ private fun ReaderScreen(
 			SettingsGroup(title = "Reading info") {
 				item { pos ->
 					SwitchSettingsItem(
-						title = stringResource(R.string.reader_info_bar),
+						title = stringResource(R.string.show_top_status_bar),
 						subtitle = stringResource(R.string.reader_info_bar_summary),
 						checked = readerBar,
 						onCheckedChange = { readerBar = it },
 						icon = R.drawable.ic_info_outline,
-						
+						shape = pos.shape,
+					)
+				}
+				item { pos ->
+					SegmentedSettingsItem(
+						title = stringResource(R.string.page_counter_placement_title),
+						labels = pageCounterLabels,
+						selectedIndex = pageCounterOptions.indexOfFirst { it.name == pageCounterPlacement }.coerceAtLeast(0),
+						onSelected = { idx -> pageCounterPlacement = pageCounterOptions[idx].name },
+						icon = R.drawable.ic_title,
 						shape = pos.shape,
 					)
 				}
@@ -616,7 +663,6 @@ private fun ReaderScreen(
 						checked = chapterJumpDialog,
 						onCheckedChange = { chapterJumpDialog = it },
 						icon = R.drawable.ic_eye,
-
 						shape = pos.shape,
 					)
 				}

@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.os.bundleOf
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.setFragmentResult
 import androidx.fragment.app.viewModels
@@ -43,6 +44,7 @@ import org.koitharu.kotatsu.core.ui.dialog.ExpressivePillButton
 import org.koitharu.kotatsu.core.util.ext.getDisplayMessage
 import org.koitharu.kotatsu.core.util.ext.observeEvent
 import org.koitharu.kotatsu.core.util.ext.withArgs
+import org.koitharu.kotatsu.kotatsumigration.ui.showExtensionInstallPromptDialog
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -60,6 +62,24 @@ class RestoreDialogFragment : ComposeAlertDialogFragment() {
 	override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
 		super.onViewCreated(view, savedInstanceState)
 		viewModel.onError.observeEvent(viewLifecycleOwner, ::onError)
+		viewModel.onTachibkCompleted.observeEvent(viewLifecycleOwner) { report ->
+			val summary = getString(
+				R.string.restore_tachibk_capsule_summary,
+				report.restoredMangaCount,
+				report.restoredCategoriesCount,
+				report.restoredMergedLinksCount,
+			)
+			setFragmentResult(
+				RESULT_STARTED,
+				bundleOf(KEY_CAPSULE_SUMMARY to summary),
+			)
+			context?.let { ctx ->
+				if (report.missingSources.isNotEmpty()) {
+					ctx.showExtensionInstallPromptDialog(report.missingSources)
+				}
+			}
+			dismissAllowingStateLoss()
+		}
 	}
 
 	@Composable
@@ -67,8 +87,21 @@ class RestoreDialogFragment : ComposeAlertDialogFragment() {
 		val isLoading by viewModel.isLoading.collectAsState()
 		val entries by viewModel.availableEntries.collectAsState()
 		val backupDate by viewModel.backupDate.collectAsState()
+		val isTachibk by viewModel.isTachibkFormat.collectAsState()
+		val tachibkEstimate by viewModel.tachibkMangaEstimate.collectAsState()
+		val progress by viewModel.tachibkProgress.collectAsState()
+
 		val subtitle = when {
+			progress != null -> stringResource(
+				R.string.restore_tachibk_progress,
+				progress!!.first,
+				progress!!.second,
+			)
 			isLoading -> stringResource(R.string.processing_)
+			isTachibk && tachibkEstimate > 0 -> stringResource(
+				R.string.restore_report_restored_simple,
+				tachibkEstimate,
+			)
 			backupDate != null -> formatBackupDate(backupDate!!)
 			else -> null
 		}
@@ -128,18 +161,24 @@ class RestoreDialogFragment : ComposeAlertDialogFragment() {
 				primary = true,
 				enabled = !isLoading && entries.any { it.isChecked },
 			) {
-				val ctx = context ?: return@ExpressivePillButton
-				val started = startRestoreService()
-				Toast.makeText(
-					ctx,
-					if (started) R.string.restoring_backup else R.string.error_occurred,
-					Toast.LENGTH_SHORT,
-				).show()
-				if (started) setFragmentResult(RESULT_STARTED, Bundle.EMPTY)
-				dismiss()
+				if (isTachibk) {
+					viewModel.runTachibkRestore()
+				} else {
+					val ctx = context ?: return@ExpressivePillButton
+					val started = startRestoreService()
+					Toast.makeText(
+						ctx,
+						if (started) R.string.restoring_backup else R.string.error_occurred,
+						Toast.LENGTH_SHORT,
+					).show()
+					if (started) setFragmentResult(RESULT_STARTED, Bundle.EMPTY)
+					dismiss()
+				}
 			}
 			Spacer(Modifier.size(8.dp))
-			ExpressiveDialogTextButton(text = stringResource(android.R.string.cancel)) { dismiss() }
+			ExpressiveDialogTextButton(text = stringResource(android.R.string.cancel)) {
+				if (!isLoading) dismiss()
+			}
 		}
 	}
 
@@ -171,8 +210,9 @@ class RestoreDialogFragment : ComposeAlertDialogFragment() {
 
 		private const val TAG = "RestoreDialogFragment"
 
-		/** Fragment result key, sent once the restore service has been started. */
+		/** Fragment result key, sent once the restore service has been started or completed. */
 		const val RESULT_STARTED = "restore_started"
+		const val KEY_CAPSULE_SUMMARY = "capsule_summary"
 
 		fun show(fm: FragmentManager, uri: Uri) {
 			RestoreDialogFragment().withArgs(1) {

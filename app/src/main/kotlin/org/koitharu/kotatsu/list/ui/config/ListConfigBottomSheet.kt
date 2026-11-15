@@ -75,7 +75,7 @@ class ListConfigBottomSheet : BaseAdaptiveSheet<SheetListModeBinding>() {
 		var mode by remember { mutableStateOf(viewModel.listMode) }
 		var isTitleOverCover by remember { mutableStateOf(viewModel.isTitleOverCover) }
 		var isGridSpacingIncreased by remember { mutableStateOf(viewModel.isGridSpacingIncreased) }
-		var gridSize by remember { mutableFloatStateOf(viewModel.gridSize.toFloat()) }
+		var gridColumns by remember { mutableFloatStateOf(viewModel.gridColumnCount.toFloat()) }
 		var isGroupingEnabled by remember { mutableStateOf(viewModel.isGroupingEnabled) }
 		val isGroupingAvailable = viewModel.isGroupingAvailable
 		val isGridMode = mode == ListMode.GRID || mode == ListMode.COVER_ONLY
@@ -125,16 +125,19 @@ class ListConfigBottomSheet : BaseAdaptiveSheet<SheetListModeBinding>() {
 				enter = expandVertically() + fadeIn(),
 				exit = shrinkVertically() + fadeOut(),
 			) {
+				val currentColumns = gridColumns.roundToInt().coerceIn(GRID_COLUMNS_MIN, GRID_COLUMNS_MAX)
 				SheetSection(
-					title = stringResource(R.string.grid_size),
-					value = "${gridSize.roundToInt()}%",
+					title = stringResource(R.string.grid_column_count),
+					value = stringResource(R.string.grid_columns_format, currentColumns),
 				) {
 					Slider(
-						value = gridSize,
-						valueRange = GRID_SIZE_MIN..GRID_SIZE_MAX,
+						value = gridColumns,
+						valueRange = GRID_COLUMNS_MIN.toFloat()..GRID_COLUMNS_MAX.toFloat(),
+						steps = GRID_COLUMNS_MAX - GRID_COLUMNS_MIN - 1,
 						onValueChange = {
-							gridSize = it
-							viewModel.gridSize = it.roundToInt()
+							val snapped = it.roundToInt().coerceIn(GRID_COLUMNS_MIN, GRID_COLUMNS_MAX)
+							gridColumns = snapped.toFloat()
+							viewModel.gridColumnCount = snapped
 						},
 						modifier = Modifier.padding(horizontal = SheetContentPadding),
 					)
@@ -159,8 +162,8 @@ class ListConfigBottomSheet : BaseAdaptiveSheet<SheetListModeBinding>() {
 
 	private companion object {
 
-		const val GRID_SIZE_MIN = 50f
-		const val GRID_SIZE_MAX = 150f
+		const val GRID_COLUMNS_MIN = 2
+		const val GRID_COLUMNS_MAX = 6
 
 		/** Mode tiles in display order: the mode, its label and its icon. */
 		val LIST_MODES = listOf(

@@ -72,6 +72,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil3.ImageLoader
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -101,6 +102,7 @@ internal fun DescriptionCard(
 	manga: Manga,
 	details: MangaDetails?,
 	accent: Color,
+	ultraCompact: Boolean = false,
 ) {
 	val linkColor = MaterialTheme.colorScheme.primary
 	// The appearance setting only decides how a long description *starts*; tapping still toggles it
@@ -116,7 +118,15 @@ internal fun DescriptionCard(
 	val cardColor = MaterialTheme.colorScheme.surfaceContainerHigh
 	val context = LocalContext.current
 	val haptic = LocalHapticFeedback.current
-	SectionCard {
+	val collapsedLines = if (ultraCompact) 3 else 5
+	Surface(
+		shape = RoundedCornerShape(if (ultraCompact) 18.dp else CARD_CORNER),
+		color = cardColor,
+		modifier = Modifier
+			.fillMaxWidth()
+			.padding(horizontal = if (ultraCompact) 16.dp else SCREEN_PADDING, vertical = if (ultraCompact) 5.dp else 8.dp),
+	) {
+		Column(modifier = Modifier.padding(if (ultraCompact) 14.dp else 20.dp)) {
 		val locale = details?.getLocale()
 		Row(
 			modifier = Modifier.fillMaxWidth(),
@@ -124,7 +134,7 @@ internal fun DescriptionCard(
 		) {
 			Text(
 				text = stringResource(R.string.description),
-				style = MaterialTheme.typography.titleMedium,
+				style = if (ultraCompact) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
 				fontWeight = FontWeight.SemiBold,
 				color = MaterialTheme.colorScheme.onSurface,
 			)
@@ -155,7 +165,7 @@ internal fun DescriptionCard(
 				}
 			}
 		}
-		Spacer(Modifier.height(10.dp))
+		Spacer(Modifier.height(if (ultraCompact) 6.dp else 10.dp))
 		Box(
 			modifier = Modifier
 				.fillMaxWidth()
@@ -177,9 +187,13 @@ internal fun DescriptionCard(
 		) {
 			Text(
 				text = if (text.isEmpty()) AnnotatedString(stringResource(R.string.no_description)) else rich,
-				style = MaterialTheme.typography.bodyMedium,
+				style = if (ultraCompact) {
+					MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp, lineHeight = 18.sp)
+				} else {
+					MaterialTheme.typography.bodyMedium
+				},
 				color = MaterialTheme.colorScheme.onSurfaceVariant,
-				maxLines = if (expanded) Int.MAX_VALUE else 5,
+				maxLines = if (expanded) Int.MAX_VALUE else collapsedLines,
 				overflow = TextOverflow.Ellipsis,
 				modifier = Modifier.fillMaxWidth(),
 				onTextLayout = { hasOverflow = it.hasVisualOverflow },
@@ -196,6 +210,7 @@ internal fun DescriptionCard(
 						),
 				)
 			}
+		}
 		}
 	}
 }
@@ -239,23 +254,34 @@ private fun CharSequence.toAnnotatedString(linkColor: Color, linksClickable: Boo
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 @Suppress("DEPRECATION")
-internal fun TagsSection(tags: List<ChipsView.ChipModel>, accent: Color, onTagClick: (MangaTag) -> Unit) {
+internal fun TagsSection(
+	tags: List<ChipsView.ChipModel>,
+	accent: Color,
+	onTagClick: (MangaTag) -> Unit,
+	ultraCompact: Boolean = false,
+) {
 	if (tags.isEmpty()) return
 	var expanded by rememberSaveable { mutableStateOf(false) }
 	val measurer = rememberTextMeasurer()
 	val density = LocalDensity.current
-	val chipStyle = MaterialTheme.typography.labelLarge
+	val chipStyle = if (ultraCompact) {
+		MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp)
+	} else {
+		MaterialTheme.typography.labelLarge
+	}
+	val gapDp = if (ultraCompact) 6.dp else 8.dp
+	val horizontalPadDp = if (ultraCompact) 10.dp else 14.dp
 
 	BoxWithConstraints(
 		modifier = Modifier
 			.fillMaxWidth()
-			.padding(horizontal = SCREEN_PADDING, vertical = 7.dp),
+			.padding(horizontal = if (ultraCompact) 16.dp else SCREEN_PADDING, vertical = if (ultraCompact) 4.dp else 7.dp),
 	) {
-		val needsToggle = remember(tags, maxWidth, chipStyle) {
+		val needsToggle = remember(tags, maxWidth, chipStyle, ultraCompact) {
 			with(density) {
 				val available = maxWidth.toPx()
-				val chipHorizontalPadding = 28.dp.toPx()
-				val gap = 8.dp.toPx()
+				val chipHorizontalPadding = (horizontalPadDp * 2).toPx()
+				val gap = gapDp.toPx()
 				var rows = 1
 				var rowWidth = 0f
 				for (tag in tags) {
@@ -275,16 +301,26 @@ internal fun TagsSection(tags: List<ChipsView.ChipModel>, accent: Color, onTagCl
 
 		FlowRow(
 			modifier = Modifier.fillMaxWidth(),
-			horizontalArrangement = Arrangement.spacedBy(8.dp),
-			verticalArrangement = Arrangement.spacedBy(8.dp),
+			horizontalArrangement = Arrangement.spacedBy(gapDp),
+			verticalArrangement = Arrangement.spacedBy(gapDp),
 			maxLines = if (needsToggle && !expanded) TAGS_COLLAPSED_ROWS else Int.MAX_VALUE,
 			overflow = if (needsToggle) {
 				androidx.compose.foundation.layout.FlowRowOverflow.expandOrCollapseIndicator(
 					expandIndicator = {
-						TagToggleChip(text = stringResource(R.string.more), accent = accent, expanded = false) { expanded = true }
+						TagToggleChip(
+							text = stringResource(R.string.more),
+							accent = accent,
+							expanded = false,
+							ultraCompact = ultraCompact,
+						) { expanded = true }
 					},
 					collapseIndicator = {
-						TagToggleChip(text = stringResource(R.string.collapse), accent = accent, expanded = true) { expanded = false }
+						TagToggleChip(
+							text = stringResource(R.string.collapse),
+							accent = accent,
+							expanded = true,
+							ultraCompact = ultraCompact,
+						) { expanded = false }
 					},
 				)
 			} else {
@@ -294,17 +330,41 @@ internal fun TagsSection(tags: List<ChipsView.ChipModel>, accent: Color, onTagCl
 			tags.forEach { tag ->
 				val mangaTag = tag.data as? MangaTag
 				val warningColor = if (tag.tint != 0) colorResource(tag.tint) else null
-				Surface(
-					shape = RoundedCornerShape(15.dp),
-					color = (warningColor ?: accent).copy(alpha = 0.16f),
-					onClick = { if (mangaTag != null) onTagClick(mangaTag) },
-				) {
-					Text(
-						text = tag.title?.toString().orEmpty(),
-						style = MaterialTheme.typography.labelLarge,
-						color = warningColor ?: accent,
-						modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
-					)
+				val pillAccent = warningColor ?: accent
+				if (ultraCompact) {
+					Surface(
+						shape = RoundedCornerShape(13.dp),
+						color = pillAccent.copy(alpha = 0.08f),
+						border = BorderStroke(1.dp, pillAccent.copy(alpha = 0.36f)),
+						onClick = { if (mangaTag != null) onTagClick(mangaTag) },
+						modifier = Modifier.height(26.dp),
+					) {
+						Box(
+							modifier = Modifier.padding(horizontal = 10.dp),
+							contentAlignment = Alignment.Center,
+						) {
+							Text(
+								text = tag.title?.toString().orEmpty(),
+								style = chipStyle,
+								fontWeight = FontWeight.Medium,
+								color = pillAccent,
+								maxLines = 1,
+							)
+						}
+					}
+				} else {
+					Surface(
+						shape = RoundedCornerShape(15.dp),
+						color = pillAccent.copy(alpha = 0.16f),
+						onClick = { if (mangaTag != null) onTagClick(mangaTag) },
+					) {
+						Text(
+							text = tag.title?.toString().orEmpty(),
+							style = MaterialTheme.typography.labelLarge,
+							color = pillAccent,
+							modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+						)
+					}
 				}
 			}
 		}
@@ -312,21 +372,32 @@ internal fun TagsSection(tags: List<ChipsView.ChipModel>, accent: Color, onTagCl
 }
 
 @Composable
-internal fun TagToggleChip(text: String, accent: Color, expanded: Boolean, onClick: () -> Unit) {
+internal fun TagToggleChip(
+	text: String,
+	accent: Color,
+	expanded: Boolean,
+	ultraCompact: Boolean = false,
+	onClick: () -> Unit,
+) {
 	Surface(
-		shape = RoundedCornerShape(15.dp),
+		shape = RoundedCornerShape(if (ultraCompact) 13.dp else 15.dp),
 		color = Color.Transparent,
 		border = BorderStroke(1.dp, accent.copy(alpha = 0.6f)),
 		onClick = onClick,
+		modifier = if (ultraCompact) Modifier.height(26.dp) else Modifier,
 	) {
 		Row(
-			modifier = Modifier.padding(start = 14.dp, end = 10.dp, top = 9.dp, bottom = 9.dp),
+			modifier = if (ultraCompact) {
+				Modifier.padding(start = 10.dp, end = 6.dp)
+			} else {
+				Modifier.padding(start = 14.dp, end = 10.dp, top = 9.dp, bottom = 9.dp)
+			},
 			verticalAlignment = Alignment.CenterVertically,
-			horizontalArrangement = Arrangement.spacedBy(4.dp),
+			horizontalArrangement = Arrangement.spacedBy(3.dp),
 		) {
 			Text(
 				text = text,
-				style = MaterialTheme.typography.labelLarge,
+				style = if (ultraCompact) MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp) else MaterialTheme.typography.labelLarge,
 				fontWeight = FontWeight.SemiBold,
 				color = accent,
 			)
@@ -335,7 +406,7 @@ internal fun TagToggleChip(text: String, accent: Color, expanded: Boolean, onCli
 				contentDescription = null,
 				tint = accent,
 				modifier = Modifier
-					.size(18.dp)
+					.size(if (ultraCompact) 14.dp else 18.dp)
 					.rotate(if (expanded) 180f else 0f),
 			)
 		}

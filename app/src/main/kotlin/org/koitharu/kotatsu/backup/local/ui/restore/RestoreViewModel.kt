@@ -8,10 +8,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runInterruptible
 import kotlinx.serialization.json.Json
+import org.koitharu.kotatsu.backup.BackupArchiveFormat
+import org.koitharu.kotatsu.backup.MihonBackupManager
+import org.koitharu.kotatsu.backup.NekoTachibkDecoder
 import org.koitharu.kotatsu.backup.local.data.model.BackupIndex
 import org.koitharu.kotatsu.backup.local.domain.BackupSection
+import org.koitharu.kotatsu.core.exceptions.BadBackupFormatException
 import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.ui.BaseViewModel
+import org.koitharu.kotatsu.core.util.ext.MutableEventFlow
+import org.koitharu.kotatsu.core.util.ext.call
 import org.koitharu.kotatsu.core.util.ext.printStackTraceDebug
 import org.koitharu.kotatsu.core.util.ext.toUriOrNull
 import java.io.FileNotFoundException
@@ -26,6 +32,7 @@ import javax.inject.Inject
 class RestoreViewModel @Inject constructor(
 	savedStateHandle: SavedStateHandle,
 	@ApplicationContext context: Context,
+	private val mihonBackupManager: MihonBackupManager,
 ) : BaseViewModel() {
 
 	val uri = savedStateHandle.get<String>(AppRouter.KEY_FILE)?.toUriOrNull()
@@ -33,6 +40,10 @@ class RestoreViewModel @Inject constructor(
 
 	val availableEntries = MutableStateFlow<List<BackupSectionModel>>(emptyList())
 	val backupDate = MutableStateFlow<Date?>(null)
+	val isTachibkFormat = MutableStateFlow(false)
+	val tachibkMangaEstimate = MutableStateFlow(0)
+	val tachibkProgress = MutableStateFlow<Pair<Int, Int>?>(null)
+	val onTachibkCompleted = MutableEventFlow<MihonBackupManager.RestoreReport>()
 
 	init {
 		launchLoadingJob(Dispatchers.Default) {
@@ -41,8 +52,37 @@ class RestoreViewModel @Inject constructor(
 	}
 
 	private suspend fun loadBackupInfo() {
+		val source = uri ?: throw FileNotFoundException()
+		val format = runInterruptible(Dispatchers.IO) {
+			contentResolver.openInputStream(source)?.use { NekoTachibkDecoder.sniffStream(it) }
+				?: throw FileNotFoundException()
+		}
+
+		if (format == BackupArchiveFormat.GZIP_PROTO || format == BackupArchiveFormat.RAW_PROTO) {
+			isTachibkFormat.value = true
+			val analysis = mihonBackupManager.analyzeBackup(source)
+			tachibkMangaEstimate.value = analysis.restoredMangaCount
+			availableEntries.value = listOf(
+				BackupSection.CATEGORIES,
+				BackupSection.FAVOURITES,
+				BackupSection.HISTORY,
+				BackupSection.SCROBBLING,
+				BackupSection.SETTINGS,
+			).map { section ->
+				BackupSectionModel(
+					section = section,
+					isChecked = true,
+					isEnabled = true,
+				)
+			}
+			return
+		}
+
+		if (format != BackupArchiveFormat.ZIP) {
+			throw BadBackupFormatException(null)
+		}
+
 		val sections = runInterruptible(Dispatchers.IO) {
-			val source = uri ?: throw FileNotFoundException()
 			ZipInputStream(contentResolver.openInputStream(source)).use { stream ->
 				val result = EnumSet.noneOf(BackupSection::class.java)
 				var entry = stream.nextEntry
@@ -75,7 +115,9 @@ class RestoreViewModel @Inject constructor(
 	fun onItemClick(item: BackupSectionModel) {
 		val map = availableEntries.value.associateByTo(EnumMap(BackupSection::class.java)) { it.section }
 		map[item.section] = item.copy(isChecked = !item.isChecked)
-		map.validate()
+		if (!isTachibkFormat.value) {
+			map.validate()
+		}
 		availableEntries.value = map.values.sortedBy { it.section.ordinal }
 	}
 
@@ -84,9 +126,34 @@ class RestoreViewModel @Inject constructor(
 			if (it.isChecked) it.section else null
 		}
 
-	/**
-	 * Favorites and bookmarks require category records — keep the dependency consistent.
-	 */
+	fun runTachibkRestore() {
+		val targetUri = uri ?: return
+		val checked = getCheckedSections()
+		val options = MihonBackupManager.Options(
+			libraryEntries = BackupSection.FAVOURITES in checked,
+			categories = BackupSection.CATEGORIES in checked,
+			history = BackupSection.HISTORY in checked,
+			tracking = BackupSection.SCROBBLING in checked,
+			appSettings = BackupSection.SETTINGS in checked,
+			sourceSettings = BackupSection.SETTINGS in checked,
+			extensionRepoSettings = BackupSection.SETTINGS in checked,
+		)
+		launchLoadingJob(Dispatchers.Default) {
+			try {
+				val report = mihonBackupManager.restoreBackup(
+					uri = targetUri,
+					options = options,
+					onProgress = { done, total ->
+						tachibkProgress.value = done to total
+					},
+				)
+				onTachibkCompleted.call(report)
+			} finally {
+				tachibkProgress.value = null
+			}
+		}
+	}
+
 	private fun MutableMap<BackupSection, BackupSectionModel>.validate() {
 		val favorites = this[BackupSection.FAVOURITES] ?: return
 		val categories = this[BackupSection.CATEGORIES]

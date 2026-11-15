@@ -262,7 +262,7 @@ private fun AppearanceScreen(
 	var hideStatusBar by rememberBooleanPref(AppSettings.KEY_HIDE_STATUS_BAR, false)
 	var locale by rememberStringPref(AppSettings.KEY_APP_LOCALE, "")
 	var listMode by rememberStringPref(AppSettings.KEY_LIST_MODE, ListMode.GRID.name)
-	var gridSize by rememberIntPref(AppSettings.KEY_GRID_SIZE, 100)
+	var gridColumnCount by rememberIntPref(AppSettings.KEY_GRID_SPAN_COUNT, 3)
 	var quickFilter by rememberBooleanPref(AppSettings.KEY_QUICK_FILTER, true)
 	var listCheckpoint by rememberBooleanPref(AppSettings.KEY_LIST_CHECKPOINT, true)
 	var readingIndicator by rememberReadingIndicatorPref(AppSettings.KEY_PROGRESS_INDICATORS)
@@ -417,15 +417,14 @@ private fun AppearanceScreen(
 				}
 				item { pos ->
 					SliderSettingsItem(
-						title = stringResource(R.string.grid_size),
-						value = gridSize,
-						valueFrom = 50,
-						valueTo = 150,
-						stepSize = 5,
-						unitSuffix = "%",
-						onValueChange = { gridSize = it },
+						title = stringResource(R.string.grid_column_count),
+						value = gridColumnCount,
+						valueFrom = 2,
+						valueTo = 6,
+						stepSize = 1,
+						unitSuffix = " cols",
+						onValueChange = { gridColumnCount = it },
 						icon = R.drawable.ic_grid,
-						
 						shape = pos.shape,
 					)
 				}

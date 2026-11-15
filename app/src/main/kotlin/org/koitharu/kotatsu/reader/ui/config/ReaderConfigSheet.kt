@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -290,6 +291,8 @@ class ReaderConfigSheet : BaseAdaptiveSheet<SheetReaderConfigBinding>() {
         var isDoubleOnFoldable by remember { mutableStateOf(settings.isReaderDoubleOnFoldable) }
         var sensitivity by remember { mutableFloatStateOf(settings.readerDoublePagesSensitivity * 100f) }
         var scrubberPosition by remember { mutableStateOf(settings.readerScrubberPosition) }
+        var showTopStatusBar by remember { mutableStateOf(settings.isReaderBarEnabled) }
+        var pageCounterPlacement by remember { mutableStateOf(settings.pageCounterPlacement) }
         var showPageNumbers by remember { mutableStateOf(settings.isPagesNumbersEnabled) }
         var showZoomButtons by remember { mutableStateOf(settings.isReaderZoomButtonsEnabled) }
         var showChapterTransitions by remember { mutableStateOf(settings.isReaderChapterTransitionsEnabled) }
@@ -341,14 +344,21 @@ class ReaderConfigSheet : BaseAdaptiveSheet<SheetReaderConfigBinding>() {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = maxPagerHeight)
                         .then(
-                            if (pagerHeightPx > 0) {
-                                Modifier.height(
-                                    with(density) { pagerHeightPx.toDp() }.coerceAtMost(maxPagerHeight),
-                                )
-                            } else {
+                            if (pagerState.currentPage == 0) {
                                 Modifier
+                                    .heightIn(max = maxPagerHeight)
+                                    .then(
+                                        if (pagerHeightPx > 0) {
+                                            Modifier.height(
+                                                with(density) { pagerHeightPx.toDp() }.coerceAtMost(maxPagerHeight),
+                                            )
+                                        } else {
+                                            Modifier
+                                        },
+                                    )
+                            } else {
+                                Modifier.wrapContentHeight()
                             },
                         ),
                 ) {
@@ -362,6 +372,7 @@ class ReaderConfigSheet : BaseAdaptiveSheet<SheetReaderConfigBinding>() {
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
+                                        .heightIn(max = maxPagerHeight)
                                         .verticalScroll(rememberScrollState())
                                         .onSizeChanged { pagerHeightPx = it.height },
                                     verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -402,6 +413,16 @@ class ReaderConfigSheet : BaseAdaptiveSheet<SheetReaderConfigBinding>() {
                                         onScrubberPositionChange = { pos ->
                                             settings.readerScrubberPosition = pos
                                             scrubberPosition = pos
+                                        },
+                                        showTopStatusBar = showTopStatusBar,
+                                        onShowTopStatusBarChange = { enabled ->
+                                            settings.isReaderBarEnabled = enabled
+                                            showTopStatusBar = enabled
+                                        },
+                                        pageCounterPlacement = pageCounterPlacement,
+                                        onPageCounterPlacementChange = { placement ->
+                                            settings.pageCounterPlacement = placement
+                                            pageCounterPlacement = placement
                                         },
                                         showPageNumbers = showPageNumbers,
                                         onShowPageNumbersChange = { enabled ->
@@ -472,20 +493,14 @@ class ReaderConfigSheet : BaseAdaptiveSheet<SheetReaderConfigBinding>() {
                             }
 
                             1 -> { // Info & Tools Page
-                                // The grid takes the whole page height so it ends flush with the
-                                // bottom, but never less than its floor: on a short landscape page
-                                // the surrounding scroll takes over instead of squashing the cards.
-                                val gridHeight = with(density) { (pagerHeightPx.toDp() - 86.dp) }
-                                    .coerceAtLeast(TOOL_GRID_MIN_HEIGHT)
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .verticalScroll(rememberScrollState())
+                                        .wrapContentHeight()
                                         .padding(horizontal = 16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
                                     ToolsGridSection(
-                                        modifier = Modifier.height(gridHeight),
                                         isAutoRotationEnabled = isAutoRotationEnabled,
                                         isBookmarkAdded = isBookmarkAdded,
                                         onSaveClick = {
@@ -1624,9 +1639,6 @@ class ReaderConfigSheet : BaseAdaptiveSheet<SheetReaderConfigBinding>() {
         } else {
             R.drawable.ic_screen_rotation
         }
-        // Rows split the height they are given equally, so the grid ends flush with the page and
-        // leaves no dead space. The caller is responsible for never handing it less than
-        // TOOL_GRID_MIN_HEIGHT - below that the cards would collapse and clip their labels.
         Column(
             modifier = modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -1635,7 +1647,7 @@ class ReaderConfigSheet : BaseAdaptiveSheet<SheetReaderConfigBinding>() {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
+                    .height(80.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 ToolPillCard(
@@ -1664,11 +1676,11 @@ class ReaderConfigSheet : BaseAdaptiveSheet<SheetReaderConfigBinding>() {
                 )
             }
 
-            // Row 2: Scroll Timer, Color correction (Squares)
+            // Row 2: Scroll Timer, Color correction
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
+                    .height(84.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 ToolGridCard(
@@ -1693,7 +1705,7 @@ class ReaderConfigSheet : BaseAdaptiveSheet<SheetReaderConfigBinding>() {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
+                    .height(80.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 ToolWideCard(
@@ -1714,7 +1726,7 @@ class ReaderConfigSheet : BaseAdaptiveSheet<SheetReaderConfigBinding>() {
                         .fillMaxHeight()
                         .aspectRatio(1f),
                     shape = CircleShape,
-                    iconSize = 42.dp,
+                    iconSize = 30.dp,
                 )
             }
         }
@@ -1752,7 +1764,7 @@ class ReaderConfigSheet : BaseAdaptiveSheet<SheetReaderConfigBinding>() {
             shape = RoundedCornerShape(24.dp),
             color = containerColor,
             contentColor = contentColor,
-            modifier = modifier.heightIn(min = 96.dp),
+            modifier = modifier.heightIn(min = 76.dp),
         ) {
             Row(
                 modifier = Modifier
@@ -1827,7 +1839,7 @@ class ReaderConfigSheet : BaseAdaptiveSheet<SheetReaderConfigBinding>() {
             shape = shape,
             color = containerColor,
             contentColor = contentColor,
-            modifier = modifier.heightIn(min = 96.dp),
+            modifier = modifier.heightIn(min = 76.dp),
         ) {
             Column(
                 modifier = Modifier
@@ -1866,10 +1878,10 @@ class ReaderConfigSheet : BaseAdaptiveSheet<SheetReaderConfigBinding>() {
     ) {
         Surface(
             onClick = onClick,
-            shape = RoundedCornerShape(48.dp),
+            shape = RoundedCornerShape(24.dp),
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             contentColor = MaterialTheme.colorScheme.onSurface,
-            modifier = modifier.heightIn(min = 96.dp),
+            modifier = modifier.heightIn(min = 76.dp),
         ) {
             Box(
                 modifier = Modifier
@@ -1885,7 +1897,7 @@ class ReaderConfigSheet : BaseAdaptiveSheet<SheetReaderConfigBinding>() {
                     Icon(
                         painter = painterResource(icon),
                         contentDescription = label,
-                        modifier = Modifier.size(32.dp),
+                        modifier = Modifier.size(26.dp),
                         tint = MaterialTheme.colorScheme.primary,
                     )
                     Spacer(modifier = Modifier.height(4.dp))

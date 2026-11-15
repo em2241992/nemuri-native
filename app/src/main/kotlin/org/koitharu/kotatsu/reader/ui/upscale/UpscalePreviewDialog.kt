@@ -60,6 +60,7 @@ import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.ReaderUpscalePreset
+import org.koitharu.kotatsu.core.prefs.UpscaleComputeMode
 import org.koitharu.kotatsu.core.prefs.observeAsFlow
 import org.koitharu.kotatsu.core.util.ext.getDisplayMessage
 import org.koitharu.kotatsu.parsers.util.runCatchingCancellable
@@ -103,6 +104,9 @@ class UpscalePreviewDialog : BottomSheetDialogFragment() {
 				val fallbackPreviewPreset by remember {
 					settings.observeAsFlow(AppSettings.KEY_READER_UPSCALE_PRESET) { previewUpscalePreset }
 				}.collectAsState(initial = settings.previewUpscalePreset)
+				val computeMode by remember {
+					settings.observeAsFlow(AppSettings.KEY_READER_UPSCALE_COMPUTE_MODE) { readerUpscaleComputeMode }
+				}.collectAsState(initial = settings.readerUpscaleComputeMode)
 
 				var pageBitmap by remember { mutableStateOf<Bitmap?>(null) }
 				var isLoading by remember { mutableStateOf(true) }
@@ -130,10 +134,14 @@ class UpscalePreviewDialog : BottomSheetDialogFragment() {
 					sourceBitmap = pageBitmap,
 					selectedPreset = selectedPreset,
 					fallbackPreviewPreset = fallbackPreviewPreset,
+					computeMode = computeMode,
 					isLoading = isLoading,
 					errorMessage = errorMessage,
 					onSelectPreset = { preset ->
 						settings.readerUpscalePreset = preset
+					},
+					onSelectComputeMode = { mode ->
+						settings.readerUpscaleComputeMode = mode
 					},
 					onToggleActive = { active ->
 						settings.isReaderUpscaleEnabled = active
@@ -184,9 +192,11 @@ private fun UpscaleSheetContent(
 	sourceBitmap: Bitmap?,
 	selectedPreset: ReaderUpscalePreset,
 	fallbackPreviewPreset: ReaderUpscalePreset,
+	computeMode: UpscaleComputeMode,
 	isLoading: Boolean,
 	errorMessage: String?,
 	onSelectPreset: (ReaderUpscalePreset) -> Unit,
+	onSelectComputeMode: (UpscaleComputeMode) -> Unit,
 	onToggleActive: (Boolean) -> Unit,
 	onOpenSettings: () -> Unit,
 	onClose: () -> Unit,
@@ -252,6 +262,7 @@ private fun UpscaleSheetContent(
 			sourceBitmap = sourceBitmap,
 			selectedPreset = selectedPreset,
 			fallbackPreviewPreset = fallbackPreviewPreset,
+			computeMode = computeMode,
 			isLoading = isLoading,
 			errorMessage = errorMessage,
 			aspectRatio = 0.84f,
@@ -260,6 +271,11 @@ private fun UpscaleSheetContent(
 		UpscalePresetGridSelector(
 			selectedPreset = selectedPreset,
 			onSelectPreset = onSelectPreset,
+		)
+
+		UpscaleComputeModeSelector(
+			selectedMode = computeMode,
+			onSelectMode = onSelectComputeMode,
 		)
 
 		Text(

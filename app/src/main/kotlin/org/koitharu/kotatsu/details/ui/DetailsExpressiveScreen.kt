@@ -106,7 +106,9 @@ fun DetailsExpressiveScreen(
 	val scheme = MaterialTheme.colorScheme
 	val accentColor = scheme.primary
 	val scrollState = rememberScrollState()
-	val centered = style != DetailsUiMode.COMPACT
+	val isUltraCompact = style == DetailsUiMode.ULTRA_COMPACT
+	val centered = style == DetailsUiMode.EXPRESSIVE
+	val dockReserve = if (isUltraCompact) 72.dp else DETAIL_DOCK_RESERVE
 
 	LaunchedEffect(scrollState) {
 		snapshotFlow { scrollState.value }.collect(onScroll)
@@ -131,11 +133,19 @@ fun DetailsExpressiveScreen(
 			modifier = Modifier
 				.fillMaxSize()
 				.verticalScroll(scrollState)
-				.padding(bottom = bottomContentPadding + DETAIL_DOCK_RESERVE),
+				.padding(bottom = bottomContentPadding + dockReserve),
 			horizontalAlignment = Alignment.CenterHorizontally,
 		) {
 			// Push the hero clear of the translucent top bar / back button.
-		Spacer(Modifier.height(topInset + if (centered) 84.dp else 72.dp))
+		Spacer(
+			Modifier.height(
+				topInset + when (style) {
+					DetailsUiMode.ULTRA_COMPACT -> 58.dp
+					DetailsUiMode.COMPACT -> 72.dp
+					DetailsUiMode.EXPRESSIVE -> 84.dp
+				},
+			),
+		)
 
 		if (manga == null) {
 			LoadingHero()
@@ -143,58 +153,78 @@ fun DetailsExpressiveScreen(
 			val favLabel = favouriteLabel ?: stringResource(R.string.add_to_favourites)
 			val isFavourite = favouriteCount > 0
 			val sourceManga = details.sourceManga
-			HeroSection(
-				centered = centered,
-				manga = manga,
-				details = details,
-				sourceTitle = sourceTitle,
-				accent = accentColor,
-				imageLoader = imageLoader,
-				coverUrl = coverUrl,
-				favouriteLabel = favLabel,
-				isFavourite = isFavourite,
-				mergedSourcesCount = mergedSourcesCount,
-				onFavouriteClick = { actions.onFavoriteClick(manga) },
-				onMergeClick = { actions.onMergeClick(sourceManga) },
-				actions = actions,
-			)
+			if (isUltraCompact) {
+				UltraCompactHeroAndActions(
+					manga = manga,
+					details = details,
+					historyInfo = historyInfo,
+					isLoading = isLoading,
+					sourceTitle = sourceTitle,
+					accent = accentColor,
+					imageLoader = imageLoader,
+					coverUrl = coverUrl,
+					favouriteLabel = favLabel,
+					isFavourite = isFavourite,
+					mergedSourcesCount = mergedSourcesCount,
+					onFavouriteClick = { actions.onFavoriteClick(manga) },
+					onMergeClick = { actions.onMergeClick(sourceManga) },
+					actions = actions,
+				)
+				Spacer(Modifier.height(4.dp))
+			} else {
+				HeroSection(
+					centered = centered,
+					manga = manga,
+					details = details,
+					sourceTitle = sourceTitle,
+					accent = accentColor,
+					imageLoader = imageLoader,
+					coverUrl = coverUrl,
+					favouriteLabel = favLabel,
+					isFavourite = isFavourite,
+					mergedSourcesCount = mergedSourcesCount,
+					onFavouriteClick = { actions.onFavoriteClick(manga) },
+					onMergeClick = { actions.onMergeClick(sourceManga) },
+					actions = actions,
+				)
 
-			if (centered) {
-				Spacer(Modifier.height(20.dp))
-				if (!manga.isLocal) {
-					Row(
-						modifier = Modifier
-							.fillMaxWidth()
-							.padding(horizontal = SCREEN_PADDING),
-						horizontalArrangement = Arrangement.spacedBy(10.dp),
-						verticalAlignment = Alignment.CenterVertically,
-					) {
+				if (centered) {
+					Spacer(Modifier.height(20.dp))
+					if (!manga.isLocal) {
+						Row(
+							modifier = Modifier
+								.fillMaxWidth()
+								.padding(horizontal = SCREEN_PADDING),
+							horizontalArrangement = Arrangement.spacedBy(10.dp),
+							verticalAlignment = Alignment.CenterVertically,
+						) {
+							FavouriteButton(
+								label = favLabel,
+								isFavourite = isFavourite,
+								accent = accentColor,
+								onClick = { actions.onFavoriteClick(manga) },
+								horizontalPadding = 0.dp,
+								modifier = Modifier.weight(1f),
+							)
+							MergeSourcesButton(
+								mergedCount = mergedSourcesCount,
+								accent = accentColor,
+								onClick = { actions.onMergeClick(sourceManga) },
+							)
+						}
+					} else {
 						FavouriteButton(
 							label = favLabel,
 							isFavourite = isFavourite,
 							accent = accentColor,
 							onClick = { actions.onFavoriteClick(manga) },
-							horizontalPadding = 0.dp,
-							modifier = Modifier.weight(1f),
-						)
-						MergeSourcesButton(
-							mergedCount = mergedSourcesCount,
-							accent = accentColor,
-							onClick = { actions.onMergeClick(sourceManga) },
 						)
 					}
-				} else {
-					FavouriteButton(
-						label = favLabel,
-						isFavourite = isFavourite,
-						accent = accentColor,
-						onClick = { actions.onFavoriteClick(manga) },
-					)
 				}
-			}
 
-			Spacer(Modifier.height(8.dp))
-			ProgressCard(historyInfo = historyInfo, isLoading = isLoading, accent = accentColor)
+				Spacer(Modifier.height(8.dp))
+				ProgressCard(historyInfo = historyInfo, isLoading = isLoading, accent = accentColor)
+			}
 
 			WhereWasIRecapCard(
 				state = whereWasIRecapState,
@@ -209,9 +239,15 @@ fun DetailsExpressiveScreen(
 				manga = manga,
 				details = details,
 				accent = accentColor,
+				ultraCompact = isUltraCompact,
 			)
 
-			TagsSection(tags = tags, accent = accentColor, onTagClick = actions.onTagClick)
+			TagsSection(
+				tags = tags,
+				accent = accentColor,
+				onTagClick = actions.onTagClick,
+				ultraCompact = isUltraCompact,
+			)
 
 			if (scrobblings.isNotEmpty()) {
 				ScrobblingSection(
@@ -237,13 +273,22 @@ fun DetailsExpressiveScreen(
 				LocalSizeRow(size = localSize, manga = manga, onClick = actions.onLocalClick)
 			}
 
-				Spacer(Modifier.height(28.dp))
+				Spacer(Modifier.height(if (isUltraCompact) 18.dp else 28.dp))
 			}
 		}
 
-			// Floating action dock: a "N chapters" pill stacked above the read FAB. Both pin to the
-			// bottom-end and stay clear of the navigation bar; the modal chapters sheet draws its own
-			// scrim over them, so they read as "behind" the sheet without any extra hide/show logic.
+		if (isUltraCompact) {
+			if (historyInfo.totalChapters > 0) {
+				Box(
+					modifier = Modifier
+						.align(Alignment.BottomEnd)
+						.padding(end = 16.dp, bottom = bottomContentPadding + 14.dp)
+						.dockGlow(scheme.surface),
+				) {
+					ChaptersPill(count = historyInfo.totalChapters, onClick = actions.onChaptersClick)
+				}
+			}
+		} else {
 			ActionDock(
 				historyInfo = historyInfo,
 				isLoading = isLoading,
@@ -254,6 +299,7 @@ fun DetailsExpressiveScreen(
 					.padding(end = SCREEN_PADDING, bottom = bottomContentPadding + 16.dp)
 					.dockGlow(scheme.surface),
 			)
+		}
 
 	}
 }

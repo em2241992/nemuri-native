@@ -176,10 +176,14 @@ class OnboardingActivity : BaseActivity<ActivityOnboardingBinding>() {
                         onPermissionBattery = ::requestBatteryOptimizationPermission,
                         onSignInGoogle = { viewModel.launchGoogleSignIn() },
                         onRestoreDropSauce = {
-                            restoreDropSauceLauncher.launch(arrayOf("application/*", "*/*"))
+                            restoreDropSauceLauncher.launch(
+                                org.koitharu.kotatsu.settings.BackupSettingsFragment.BACKUP_PICKER_MIME_TYPES,
+                            )
                         },
                         onRestoreTachiyomi = {
-                            restoreTachiyomiLauncher.launch(arrayOf("application/*", "*/*"))
+                            restoreTachiyomiLauncher.launch(
+                                org.koitharu.kotatsu.settings.BackupSettingsFragment.BACKUP_PICKER_MIME_TYPES,
+                            )
                         },
                         onOpenGithub = {
                             openExternalLink(getString(R.string.url_github), getString(R.string.source_code))

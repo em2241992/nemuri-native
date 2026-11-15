@@ -175,6 +175,12 @@ class ReaderViewModel @Inject constructor(
         valueProducer = { isPagesNumbersEnabled },
     )
 
+    val pageCounterPlacement = settings.observeAsStateFlow(
+        scope = viewModelScope + Dispatchers.Default,
+        key = AppSettings.KEY_PAGE_COUNTER_PLACEMENT,
+        valueProducer = { pageCounterPlacement },
+    )
+
     val scrubberPosition = settings.observeAsStateFlow(
         scope = viewModelScope + Dispatchers.Default,
         key = AppSettings.KEY_READER_SCRUBBER_POSITION,

@@ -237,7 +237,20 @@
 
 	<style name="Widget.Kotatsu.Chip" parent="Widget.Material3.Chip.Suggestion" />
 
-	<style name="Widget.Kotatsu.Chip.Filter" parent="Widget.Material3.Chip.Filter" />
+	<style name="Widget.Kotatsu.Chip.Filter" parent="Widget.Material3.Chip.Filter">
+		<item name="chipMinHeight">28dp</item>
+		<item name="chipCornerRadius">14dp</item>
+		<item name="chipStartPadding">8dp</item>
+		<item name="chipEndPadding">9dp</item>
+		<item name="iconStartPadding">2dp</item>
+		<item name="iconEndPadding">2dp</item>
+		<item name="textStartPadding">4dp</item>
+		<item name="textEndPadding">2dp</item>
+		<item name="chipIconSize">8dp</item>
+		<item name="checkedIconVisible">false</item>
+		<item name="ensureMinTouchTargetSize">false</item>
+		<item name="android:textAppearance">?attr/textAppearanceLabelMedium</item>
+	</style>
 
 	<style name="Widget.Kotatsu.Chip.Assist" parent="Widget.Material3.Chip.Assist" />
 

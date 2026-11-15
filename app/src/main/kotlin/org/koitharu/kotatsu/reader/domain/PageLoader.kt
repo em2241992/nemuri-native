@@ -39,6 +39,8 @@ import org.koitharu.kotatsu.core.image.BitmapDecoderCompat
 import org.koitharu.kotatsu.core.network.CommonHeaders
 import org.koitharu.kotatsu.core.network.MangaHttpClient
 import org.koitharu.kotatsu.core.network.imageproxy.ImageProxyInterceptor
+import org.koitharu.kotatsu.core.os.HardwareAcceleratorProbe
+import org.koitharu.kotatsu.core.os.ResolvedUpscaleBackend
 import org.koitharu.kotatsu.core.parser.CachingMangaRepository
 import org.koitharu.kotatsu.core.parser.MangaRepository
 import org.koitharu.kotatsu.core.prefs.AppSettings
@@ -127,6 +129,12 @@ class PageLoader @Inject constructor(
 		}
 		if (counter.get() == 0) {
 			onIdle()
+		}
+	}
+
+	fun invalidateTask(pageId: Long) {
+		synchronized(tasks) {
+			tasks.remove(pageId)
 		}
 	}
 
@@ -283,12 +291,15 @@ class PageLoader @Inject constructor(
 	): Uri = semaphore.withPermit {
 		val pageUrl = getPageUrl(page)
 		check(pageUrl.isNotBlank()) { "Cannot obtain full image url for $page" }
-		val cpuPreset = if (!UpscaleEffect.isSupported && !isPrefetch && !context.isPowerSaveMode()) {
+		val useCpuUpscale = HardwareAcceleratorProbe.resolveUpscaleBackend(
+			settings.readerUpscaleComputeMode,
+		) == ResolvedUpscaleBackend.CPU_MULTICORE
+		val cpuPreset = if (useCpuUpscale && settings.isReaderUpscaleEnabled && !isPrefetch && !context.isPowerSaveMode()) {
 			settings.readerUpscalePreset.takeIf { it != ReaderUpscalePreset.OFF }
 		} else {
 			null
 		}
-		val postCacheKey = cpuPreset?.let { "$pageUrl#upscale_${it.name}" }
+		val postCacheKey = cpuPreset?.let { "$pageUrl#upscale_${it.name}_cpu" }
 		if (!skipCache) {
 			if (postCacheKey != null) {
 				cache.get(postCacheKey)?.let { return it.toUri() }
@@ -296,8 +307,9 @@ class PageLoader @Inject constructor(
 				cache.get(pageUrl)?.let { return it.toUri() }
 			}
 		}
+		val cachedRawUri = if (!skipCache) cache.get(pageUrl)?.toUri() else null
 		val uri = pageUrl.toUri()
-		val rawUri = when {
+		val rawUri = cachedRawUri ?: when {
 			uri.isZipUri() -> if (uri.scheme == URI_SCHEME_ZIP) {
 				uri
 			} else { // legacy uri
@@ -342,7 +354,8 @@ class PageLoader @Inject constructor(
 		convertLock.withLock {
 			cache.get(postCacheKey)?.let { return@withLock it.toUri() }
 			val enhanced = runInterruptible(Dispatchers.Default) {
-				val decoded = decodeRawBitmapWithOomBounds(rawUri, maxSidePx = 2800)
+				val decoded = decodeRawBitmapWithOomBoundsOrNullForTallStrip(rawUri, maxSidePx = 2800)
+					?: return@runInterruptible null
 				try {
 					val processed = ReaderBitmapUpscaler.processBitmap(
 						source = decoded,
@@ -369,6 +382,31 @@ class PageLoader @Inject constructor(
 			}
 		}
 	}.getOrDefault(rawUri)
+
+	@Blocking
+	private fun decodeRawBitmapWithOomBoundsOrNullForTallStrip(uri: Uri, maxSidePx: Int): Bitmap? {
+		val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+		openUriInputStream(uri).use { BitmapFactory.decodeStream(it, null, bounds) }
+		val w = bounds.outWidth
+		val h = bounds.outHeight
+		if (w <= 0 || h <= 0) return null
+		// Guard against tall vertical webtoon strips (> 3:1 aspect or > 4096px tall):
+		// SubsamplingScaleImageView region-tiles these directly, so skip full-strip software upscale.
+		if (h > 4096 || h > w * 3) {
+			return null
+		}
+		var sample = 1
+		while (w / sample > maxSidePx || h / sample > maxSidePx) {
+			sample *= 2
+		}
+		val opts = BitmapFactory.Options().apply {
+			inSampleSize = sample
+			inPreferredConfig = Bitmap.Config.ARGB_8888
+		}
+		return openUriInputStream(uri).use {
+			BitmapFactory.decodeStream(it, null, opts)
+		}
+	}
 
 	@Blocking
 	private fun decodeRawBitmapWithOomBounds(uri: Uri, maxSidePx: Int): Bitmap {

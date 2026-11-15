@@ -217,6 +217,7 @@ class ExploreViewModel @Inject constructor(
 
 	/** Permanently dismisses the multi-language note at the bottom of Explore. */
 	fun dismissLanguageTip() {
+		settings.isExploreMultiLangTipDismissed = true
 		settings.closeTip(TIP_LANGUAGES)
 	}
 
@@ -233,7 +234,10 @@ class ExploreViewModel @Inject constructor(
 		sourcesRepository.observeMihonLoadingState(),
 		isGrid,
 		sourcesRepository.observeHasMultiLanguageSources(),
-		settings.observeAsFlow(AppSettings.KEY_TIPS_CLOSED) { isTipEnabled(TIP_LANGUAGES) },
+		kotlinx.coroutines.flow.combine(
+			settings.observeAsFlow(AppSettings.KEY_TIPS_CLOSED) { isTipEnabled(TIP_LANGUAGES) },
+			settings.observeAsFlow(AppSettings.KEY_EXPLORE_MULTILANG_TIP_DISMISSED) { isExploreMultiLangTipDismissed },
+		) { tipEnabled, explicitlyDismissed -> tipEnabled && !explicitlyDismissed },
 		hasExtensionUpdates,
 	) { args ->
 		val allSources = args[0] as List<MangaSourceInfo>
@@ -282,8 +286,8 @@ class ExploreViewModel @Inject constructor(
 				actionStringRes = NO_ACTION_STRING_RES,
 			)
 		}
-		// Footer note: only relevant when a multi-language source is installed and not dismissed.
-		if (shown.isNotEmpty() && hasMultiLanguageSources && isLanguageTipEnabled) {
+		// Footer note: shown at most once (on the primary manga sources page) when a multi-language source is active and not dismissed.
+		if (!isNovelShown && shown.isNotEmpty() && hasMultiLanguageSources && isLanguageTipEnabled) {
 			result += TipModel(
 				key = TIP_LANGUAGES,
 				title = R.string.multi_language_sources,

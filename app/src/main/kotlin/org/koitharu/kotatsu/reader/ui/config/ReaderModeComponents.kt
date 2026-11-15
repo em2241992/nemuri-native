@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.prefs.PageCounterPlacement
 import org.koitharu.kotatsu.core.prefs.ReaderMode
 import org.koitharu.kotatsu.core.prefs.ReaderScrubberPosition
 import org.koitharu.kotatsu.core.ui.sheet.SheetSegment
@@ -217,6 +218,10 @@ internal fun DoublePageConfigSection(
 internal fun ScrubberAndHudConfigSection(
     scrubberPosition: ReaderScrubberPosition,
     onScrubberPositionChange: (ReaderScrubberPosition) -> Unit,
+    showTopStatusBar: Boolean,
+    onShowTopStatusBarChange: (Boolean) -> Unit,
+    pageCounterPlacement: PageCounterPlacement,
+    onPageCounterPlacementChange: (PageCounterPlacement) -> Unit,
     showPageNumbers: Boolean,
     onShowPageNumbersChange: (Boolean) -> Unit,
     showZoomButtons: Boolean,
@@ -232,6 +237,12 @@ internal fun ScrubberAndHudConfigSection(
         ReaderScrubberPosition.BOTTOM to (R.string.reader_scrubber_bottom to R.drawable.ic_move_horizontal),
     )
     val selectedIndex = positions.indexOfFirst { it.first == scrubberPosition }.coerceAtLeast(0)
+    val placementOptions = listOf(
+        PageCounterPlacement.BOTTOM_CENTER to R.string.page_counter_bottom_center,
+        PageCounterPlacement.TOP_BAR to R.string.page_counter_top_bar,
+        PageCounterPlacement.BOTH to R.string.page_counter_both,
+        PageCounterPlacement.HIDDEN to R.string.page_counter_hidden,
+    )
 
     Surface(
         shape = RoundedCornerShape(24.dp),
@@ -273,6 +284,75 @@ internal fun ScrubberAndHudConfigSection(
                     selectedIndex = selectedIndex,
                     onSelect = { idx -> onScrubberPositionChange(positions[idx].first) },
                 )
+            }
+
+            ConfigToggleRow(
+                iconRes = R.drawable.ic_info_outline,
+                title = stringResource(R.string.show_top_status_bar),
+                subtitle = stringResource(R.string.reader_info_bar_summary),
+                checked = showTopStatusBar,
+                onCheckedChange = onShowTopStatusBarChange,
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.page_counter_placement_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(40.dp),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(3.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        placementOptions.forEach { (placement, labelRes) ->
+                            val selected = placement == pageCounterPlacement
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clip(RoundedCornerShape(13.dp))
+                                    .background(
+                                        if (selected) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.surfaceContainerHighest
+                                        },
+                                    )
+                                    .clickable { onPageCounterPlacementChange(placement) },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = stringResource(labelRes),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (selected) {
+                                        MaterialTheme.colorScheme.onPrimary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
             ConfigToggleRow(

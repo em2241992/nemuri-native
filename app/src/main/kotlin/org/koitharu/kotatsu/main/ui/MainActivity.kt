@@ -173,11 +173,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 		}
 		viewBinding.bottomNav?.setOnContinueClickListener { viewModel.openLastReader() }
 		viewBinding.bottomNav?.setOnContinueLongClickListener { openIncognitoSwitcher() }
-		viewBinding.buttonQuickAction.setOnClickListener { onQuickActionClick() }
 		viewBinding.buttonOverflow.setOnClickListener(this::showMainOverflowMenu)
-		viewBinding.buttonSettings.setOnClickListener {
-			router.openSettings()
-		}
 		viewBinding.buttonUpdate.setOnClickListener { router.openAppUpdate(autoDownload = true) }
 		viewBinding.buttonUpdateDismiss.setOnClickListener {
 			viewModel.appUpdate.value?.let { settings.dismissedUpdateVersion = it.name }
@@ -205,7 +201,12 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 			navigationDelegate.observeTitle().observe(this) { tv.text = it }
 		}
 
-		addMainOverflowMenuProvider(MainMenuProvider(viewModel))
+		addMainOverflowMenuProvider(
+			MainMenuProvider(
+				viewModel = viewModel,
+				onOpenSettings = { router.openSettings() },
+			),
+		)
 
 		val exitCallback = ExitCallback(this, viewBinding.container)
 		onBackPressedDispatcher.addCallback(exitCallback)
@@ -256,7 +257,6 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 	override fun onFragmentChanged(fragment: Fragment, fromUser: Boolean) {
 		adjustFabVisibility(topFragment = fragment)
 		adjustAppbar(topFragment = fragment)
-		updateQuickActionButton(topFragment = fragment)
 		if (fromUser) {
 			actionModeDelegate.finishActionMode()
 			viewBinding.appbar.setExpanded(true)
@@ -462,46 +462,6 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 				viewModel.openLastReader()
 			},
 		)
-	}
-
-	private fun updateQuickActionButton(topFragment: Fragment?) {
-		val useSparkles = topFragment is ExploreFragment || topFragment is EnhanceFragment
-		viewBinding.buttonQuickAction.setIconResource(
-			if (useSparkles) R.drawable.ic_sparkles else R.drawable.ic_tune,
-		)
-		viewBinding.buttonQuickAction.contentDescription = getString(
-			if (useSparkles) R.string.enhance else R.string.filter,
-		)
-	}
-
-	private fun onQuickActionClick() {
-		when (val fragment = navigationDelegate.primaryFragment) {
-			is FavouritesContainerFragment -> {
-				val section = fragment.currentCategoryId?.let(ListConfigSection::Favorites)
-					?: ListConfigSection.General
-				router.showListConfigSheet(section)
-			}
-			is HistoryListFragment -> router.showListConfigSheet(ListConfigSection.History)
-			is FeedFragment -> startActivity(
-				Intent(this, SettingsActivity::class.java).setAction(AppRouter.ACTION_TRACKER),
-			)
-			is ExploreFragment -> {
-				val nav = bottomNav ?: viewBinding.navRail
-				if (nav?.menu?.findItem(R.id.nav_enhance) != null) {
-					nav.selectedItemId = R.id.nav_enhance
-				} else {
-					startActivity(
-						Intent(this, SettingsActivity::class.java)
-							.setAction(SettingsActivity.ACTION_BROKEN_SOURCES),
-					)
-				}
-			}
-			is EnhanceFragment -> startActivity(
-				Intent(this, SettingsActivity::class.java)
-					.setAction(SettingsActivity.ACTION_BROKEN_SOURCES),
-			)
-			else -> router.showListConfigSheet(ListConfigSection.General)
-		}
 	}
 
 	private fun onLoadingStateChanged(isLoading: Boolean) {

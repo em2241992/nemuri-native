@@ -10,6 +10,7 @@ import androidx.core.view.updateLayoutParams
 import coil3.size.Size
 import com.hannesdorfmann.adapterdelegates4.dsl.adapterDelegateViewBinding
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.parser.SourceShortCodeResolver
 import org.koitharu.kotatsu.core.ui.list.AdapterDelegateClickListenerAdapter
 import org.koitharu.kotatsu.core.ui.list.OnListItemClickListener
 import org.koitharu.kotatsu.core.util.ext.getThemeColor
@@ -90,5 +91,8 @@ fun mangaGridItemAD(
 		binding.imageViewCover.setImageAsync(item.coverUrl, item.manga)
 		binding.corners.badge.number = item.counter
 		binding.corners.badge.isVisible = item.counter > 0
+		val shortCode = SourceShortCodeResolver.resolve(item.source, context)
+		binding.corners.textViewSourceShort.text = shortCode
+		binding.corners.textViewSourceShort.isVisible = shortCode.isNotBlank()
 	}
 }

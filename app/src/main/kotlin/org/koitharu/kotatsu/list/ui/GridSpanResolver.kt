@@ -18,6 +18,7 @@ class GridSpanResolver(
 	private val gridWidth = resources.getDimension(R.dimen.preferred_grid_width)
 	private val spacing = resources.getDimension(R.dimen.grid_spacing)
 	private var cellWidth = -1f
+	private var fixedColumns = 0
 
 	override fun onLayoutChange(
 		v: View?,
@@ -30,10 +31,15 @@ class GridSpanResolver(
 		oldRight: Int,
 		oldBottom: Int,
 	) {
+		val rv = v as? RecyclerView ?: return
+		if (fixedColumns > 0) {
+			spanCount = fixedColumns
+			(rv.layoutManager as? GridLayoutManager)?.spanCount = spanCount
+			return
+		}
 		if (cellWidth <= 0f) {
 			return
 		}
-		val rv = v as? RecyclerView ?: return
 		val width = abs(right - left)
 		// Ignore implausibly small widths. While the RecyclerView lives inside a ViewPager2
 		// (e.g. the favourites pager) it can momentarily be laid out at a tiny transient width
@@ -47,7 +53,14 @@ class GridSpanResolver(
 		(rv.layoutManager as? GridLayoutManager)?.spanCount = spanCount
 	}
 
+	fun setFixedSpanCount(columns: Int, rv: RecyclerView) {
+		fixedColumns = columns.coerceIn(2, 6)
+		spanCount = fixedColumns
+		(rv.layoutManager as? GridLayoutManager)?.spanCount = spanCount
+	}
+
 	fun setGridSize(scaleFactor: Float, rv: RecyclerView) {
+		fixedColumns = 0
 		cellWidth = (gridWidth * scaleFactor) + spacing
 		val lm = rv.layoutManager as? GridLayoutManager ?: return
 		val innerWidth = lm.width - lm.paddingEnd - lm.paddingStart

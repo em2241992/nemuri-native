@@ -25,20 +25,29 @@ class FavoritesListQuickFilter @AssistedInject constructor(
 	}
 
 	override suspend fun getAvailableFilterOptions(): List<ListFilterOption> = buildList {
+		add(ListFilterOption.Macro.UNREAD)
 		add(ListFilterOption.Downloaded)
+		add(ListFilterOption.Macro.COMPLETED)
+		add(ListFilterOption.Macro.DUPLICATES)
 		if (settings.isTrackerEnabled) {
 			add(ListFilterOption.Macro.NEW_CHAPTERS)
 		}
-		add(ListFilterOption.Macro.COMPLETED)
 	}
 
 	override suspend fun getAdditionalChips(
 		selectedOptions: Set<ListFilterOption>,
 	): List<ChipsView.ChipModel> {
+		val allSeriesChip = ChipsView.ChipModel(
+			titleResId = R.string.filter_all_series,
+			icon = R.drawable.ic_status_dot,
+			isChecked = selectedOptions.isEmpty(),
+			isCheckedIconVisible = false,
+			data = ListFilterOption.All,
+		)
 		val options = getSourceOptions()
 		pruneStaleSourceFilters(selectedOptions, options)
 		if (options.isEmpty()) {
-			return emptyList()
+			return listOf(allSeriesChip)
 		}
 		val selectedSourceNames = selectedOptions
 			.filterIsInstance<ListFilterOption.Source>()
@@ -46,6 +55,7 @@ class FavoritesListQuickFilter @AssistedInject constructor(
 		val selectedSources = options
 			.filterTo(LinkedHashSet<ListFilterOption.Source>()) { it.mangaSource.name in selectedSourceNames }
 		return listOf(
+			allSeriesChip,
 			ChipsView.ChipModel(
 				icon = R.drawable.ic_filter_funnel,
 				isChecked = selectedSources.isNotEmpty(),

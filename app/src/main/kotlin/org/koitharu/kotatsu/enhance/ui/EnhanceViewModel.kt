@@ -43,6 +43,7 @@ import org.koitharu.kotatsu.core.parser.MangaRepository
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.DedupeWinnerRule
 import org.koitharu.kotatsu.core.prefs.ReaderUpscalePreset
+import org.koitharu.kotatsu.core.prefs.UpscaleComputeMode
 import org.koitharu.kotatsu.core.prefs.observeAsFlow
 import org.koitharu.kotatsu.core.util.ext.getDisplayMessage
 import org.koitharu.kotatsu.core.util.ext.mangaSourceExtra
@@ -79,6 +80,7 @@ data class EnhanceUiState(
 	val healthScanTotal: Int = 0,
 	val upscalePreset: ReaderUpscalePreset = ReaderUpscalePreset.OFF,
 	val previewUpscalePreset: ReaderUpscalePreset = ReaderUpscalePreset.FAST_NPU_1_5X,
+	val upscaleComputeMode: UpscaleComputeMode = UpscaleComputeMode.AUTO,
 	val is32BitColor: Boolean = false,
 	val upscaleSamples: List<UpscaleSampleItem> = emptyList(),
 	val selectedSampleId: Long? = null,
@@ -114,6 +116,7 @@ class EnhanceViewModel @Inject constructor(
 			selectedPriorityKeys = settings.enhanceSourcePriorityOrder,
 			upscalePreset = settings.readerUpscalePreset,
 			previewUpscalePreset = settings.previewUpscalePreset,
+			upscaleComputeMode = settings.readerUpscaleComputeMode,
 			is32BitColor = settings.is32BitColorsEnabled,
 		),
 	)
@@ -133,15 +136,17 @@ class EnhanceViewModel @Inject constructor(
 				settings.observeAsFlow(AppSettings.KEY_CHECK_DUPLICATES) { isDuplicateCheckEnabled },
 				settings.observeAsFlow(AppSettings.KEY_READER_UPSCALE) { isReaderUpscaleEnabled },
 				settings.observeAsFlow(AppSettings.KEY_READER_UPSCALE_PRESET) { readerUpscalePreset },
+				settings.observeAsFlow(AppSettings.KEY_READER_UPSCALE_COMPUTE_MODE) { readerUpscaleComputeMode },
 				settings.observeAsFlow(AppSettings.KEY_32BIT_COLOR) { is32BitColorsEnabled },
-			) { checkSwap, _, upscale, color32 ->
-				QuadSettings(checkSwap, upscale, settings.previewUpscalePreset, color32)
+			) { checkSwap, _, upscale, computeMode, color32 ->
+				QuintSettings(checkSwap, upscale, settings.previewUpscalePreset, computeMode, color32)
 			}.collectLatest { s ->
 				_state.update { current ->
 					current.copy(
 						checkAndSwapOnAdd = s.checkSwap,
 						upscalePreset = s.upscale,
 						previewUpscalePreset = s.previewUpscale,
+						upscaleComputeMode = s.computeMode,
 						is32BitColor = s.color32,
 					)
 				}
@@ -523,6 +528,10 @@ class EnhanceViewModel @Inject constructor(
 		settings.readerUpscalePreset = preset
 	}
 
+	fun selectUpscaleComputeMode(mode: UpscaleComputeMode) {
+		settings.readerUpscaleComputeMode = mode
+	}
+
 	fun setUpscaleActive(active: Boolean) {
 		settings.isReaderUpscaleEnabled = active
 	}
@@ -567,10 +576,11 @@ class EnhanceViewModel @Inject constructor(
 		}
 	}
 
-	private data class QuadSettings(
+	private data class QuintSettings(
 		val checkSwap: Boolean,
 		val upscale: ReaderUpscalePreset,
 		val previewUpscale: ReaderUpscalePreset,
+		val computeMode: UpscaleComputeMode,
 		val color32: Boolean,
 	)
 

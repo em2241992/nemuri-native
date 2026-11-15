@@ -74,6 +74,11 @@ class DuplicatesSheet : BaseAdaptiveSheet<SheetDuplicatesBinding>() {
 
 		setContentVisible(false)
 		viewModel.state.observe(viewLifecycleOwner, ::onStateChanged)
+		viewModel.onAddedToDefault.observeEvent(viewLifecycleOwner) {
+			context?.let { ctx ->
+				Toast.makeText(ctx, R.string.added_to_default_category, Toast.LENGTH_SHORT).show()
+			}
+		}
 		viewModel.onFinished.observeEvent(viewLifecycleOwner, ::onFinished)
 		viewModel.onMigrated.observeEvent(viewLifecycleOwner, ::onMigrated)
 		viewModel.onMerged.observeEvent(viewLifecycleOwner, ::onMerged)

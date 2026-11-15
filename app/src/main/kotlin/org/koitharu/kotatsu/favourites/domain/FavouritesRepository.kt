@@ -168,6 +168,54 @@ class FavouritesRepository @Inject constructor(
 		return db.getFavouritesDao().findCategoriesIds(mangaId).toSet()
 	}
 
+	fun isDefaultCategoryTitle(title: String): Boolean {
+		val trimmed = title.trim()
+		return trimmed.equals("Default", ignoreCase = true) ||
+			trimmed.equals("Read later", ignoreCase = true)
+	}
+
+	suspend fun getOrCreateDefaultCategory(defaultTitle: String = "Default"): FavouriteCategory {
+		val dao = db.getFavouriteCategoriesDao()
+		val existing = dao.findAll().firstOrNull { isDefaultCategoryTitle(it.title) }
+		if (existing != null) {
+			if (existing.title.equals("Read later", ignoreCase = true) && !defaultTitle.equals("Read later", ignoreCase = true)) {
+				dao.update(
+					id = existing.categoryId.toLong(),
+					title = defaultTitle,
+					order = existing.order,
+					tracker = existing.track,
+					downloadNewChapters = existing.downloadNewChapters,
+					onShelf = existing.isVisibleInLibrary,
+				)
+				return existing.copy(title = defaultTitle).toFavouriteCategory()
+			}
+			return existing.toFavouriteCategory()
+		}
+		val entity = FavouriteCategoryEntity(
+			title = defaultTitle,
+			createdAt = System.currentTimeMillis(),
+			sortKey = 0,
+			categoryId = 0,
+			order = ListSortOrder.NEWEST.name,
+			track = true,
+			downloadNewChapters = false,
+			deletedAt = 0L,
+			isVisibleInLibrary = true,
+		)
+		val id = dao.insert(entity)
+		return entity.toFavouriteCategory(id)
+	}
+
+	suspend fun hasCustomCategories(): Boolean {
+		return db.getFavouriteCategoriesDao().findAll().any { !isDefaultCategoryTitle(it.title) }
+	}
+
+	suspend fun addToDefaultCategory(mangas: Collection<Manga>): FavouriteCategory {
+		val defaultCategory = getOrCreateDefaultCategory()
+		addToCategory(defaultCategory.id, mangas)
+		return defaultCategory
+	}
+
 	suspend fun findPopularSources(categoryId: Long, limit: Int): List<MangaSource> {
 		return db.getFavouritesDao().run {
 			if (categoryId == 0L) {

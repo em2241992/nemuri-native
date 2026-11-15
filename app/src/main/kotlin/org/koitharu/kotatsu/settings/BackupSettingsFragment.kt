@@ -7,22 +7,44 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.core.app.NotificationChannelCompat
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.backup.MihonBackupExporter
@@ -34,7 +56,6 @@ import org.koitharu.kotatsu.backup.local.ui.backup.BackupService
 import org.koitharu.kotatsu.backup.local.ui.periodical.PeriodicalBackupSettingsFragment
 import org.koitharu.kotatsu.backup.local.ui.restore.RestoreDialogFragment
 import org.koitharu.kotatsu.core.ui.dialog.buildAlertDialog
-import org.koitharu.kotatsu.core.util.ext.checkNotificationPermission
 import org.koitharu.kotatsu.core.util.ext.getDisplayMessage
 import org.koitharu.kotatsu.core.util.ext.observeEvent
 import org.koitharu.kotatsu.kotatsumigration.domain.KotatsuMigrationManager
@@ -50,6 +71,10 @@ import org.koitharu.kotatsu.settings.compose.SettingsGroup
 import org.koitharu.kotatsu.settings.compose.SettingsScaffold
 import javax.inject.Inject
 
+private val CapsuleBg = Color(0xFF12161F)
+private val CapsuleCyan = Color(0xFF5CE1E6)
+private val CapsuleError = Color(0xFFF87171)
+
 @AndroidEntryPoint
 class BackupSettingsFragment : BaseComposeSettingsFragment(R.string.backup_restore) {
 
@@ -61,6 +86,9 @@ class BackupSettingsFragment : BaseComposeSettingsFragment(R.string.backup_resto
 
 	@Inject
 	lateinit var mihonExporter: MihonBackupExporter
+
+	private val tachibkProgressState = MutableStateFlow<Pair<Int, Int>?>(null)
+	private val capsuleToastState = MutableStateFlow<Pair<String, Boolean>?>(null)
 
 	private val restoreMihonBackupLauncher = registerForActivityResult(
 		ActivityResultContracts.OpenDocument(),
@@ -74,7 +102,7 @@ class BackupSettingsFragment : BaseComposeSettingsFragment(R.string.backup_resto
 		ActivityResultContracts.CreateDocument(BackupUtils.MIME_TYPE),
 	) { uri ->
 		if (uri != null && BackupService.start(requireContext(), uri)) {
-			Toast.makeText(requireContext(), R.string.creating_backup, Toast.LENGTH_SHORT).show()
+			showBottomCapsuleToast(getString(R.string.creating_backup))
 		}
 	}
 
@@ -103,6 +131,16 @@ class BackupSettingsFragment : BaseComposeSettingsFragment(R.string.backup_resto
 		setContent {
 			DropSauceTheme {
 				val migrationState by migrationManager.state.collectAsState()
+				val tachibkProgress by tachibkProgressState.collectAsState()
+				val capsuleToast by capsuleToastState.collectAsState()
+
+				LaunchedEffect(capsuleToast) {
+					if (capsuleToast != null) {
+						delay(4_200L)
+						capsuleToastState.value = null
+					}
+				}
+
 				val migrationSubtitle = when (val s = migrationState) {
 					is MigrationState.Running -> stringResource(
 						R.string.kotatsu_migration_progress,
@@ -118,50 +156,110 @@ class BackupSettingsFragment : BaseComposeSettingsFragment(R.string.backup_resto
 
 					MigrationState.Idle -> stringResource(R.string.migrate_from_kotatsu_summary)
 				}
-				BackupScreen(
-					onCreateBackup = {
-						createLocalBackupLauncher.launch(
-							BackupUtils.generateFileName(requireContext()),
-						)
-					},
-					onRestoreLocal = {
-						restoreLocalBackupLauncher.launch(
-							arrayOf(BackupUtils.MIME_TYPE, "application/*", "*/*"),
-						)
-					},
-					onOpenPeriodic = {
-						(activity as? SettingsActivity)?.openFragment(
-							PeriodicalBackupSettingsFragment::class.java,
-							null,
-							isFromRoot = false,
-						)
-					},
-					onRestoreFromTachiyomi = {
-						restoreMihonBackupLauncher.launch(arrayOf("application/*", "*/*"))
-					},
-					migrationSubtitle = migrationSubtitle,
-					onMigrateFromKotatsu = ::confirmAndStartKotatsuMigration,
-					onExportToMihon = {
-						exportMihonBackupLauncher.launch(MihonBackupExporter.generateFileName())
-					},
-				)
+
+				val tachibkSubtitle = tachibkProgress?.let { (done, total) ->
+					stringResource(R.string.restore_tachibk_progress, done, total)
+				} ?: stringResource(R.string.restore_tachiyomi_summary)
+
+				Box(modifier = Modifier.fillMaxSize()) {
+					BackupScreen(
+						onCreateBackup = {
+							createLocalBackupLauncher.launch(
+								BackupUtils.generateFileName(requireContext()),
+							)
+						},
+						onRestoreLocal = {
+							restoreLocalBackupLauncher.launch(BACKUP_PICKER_MIME_TYPES)
+						},
+						onOpenPeriodic = {
+							(activity as? SettingsActivity)?.openFragment(
+								PeriodicalBackupSettingsFragment::class.java,
+								null,
+								isFromRoot = false,
+							)
+						},
+						tachibkSubtitle = tachibkSubtitle,
+						onRestoreFromTachiyomi = {
+							restoreMihonBackupLauncher.launch(BACKUP_PICKER_MIME_TYPES)
+						},
+						migrationSubtitle = migrationSubtitle,
+						onMigrateFromKotatsu = ::confirmAndStartKotatsuMigration,
+						onExportToMihon = {
+							exportMihonBackupLauncher.launch(MihonBackupExporter.generateFileName())
+						},
+					)
+
+					// Floating Bottom Capsule Toast (strictly bottom-anchored — zero top notification banners)
+					AnimatedVisibility(
+						visible = capsuleToast != null,
+						enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(),
+						exit = slideOutVertically(targetOffsetY = { it / 2 }) + fadeOut(),
+						modifier = Modifier
+							.align(Alignment.BottomCenter)
+							.navigationBarsPadding()
+							.padding(horizontal = 20.dp, vertical = 20.dp),
+					) {
+						val currentToast = capsuleToast
+						if (currentToast != null) {
+							val accent = if (currentToast.second) CapsuleError else CapsuleCyan
+							Surface(
+								shape = RoundedCornerShape(999.dp),
+								color = CapsuleBg,
+								border = BorderStroke(1.dp, accent.copy(alpha = 0.55f)),
+								shadowElevation = 8.dp,
+							) {
+								Row(
+									modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+									verticalAlignment = Alignment.CenterVertically,
+								) {
+									Icon(
+										painter = painterResource(R.drawable.ic_backup_restore),
+										contentDescription = null,
+										tint = accent,
+										modifier = Modifier.size(16.dp),
+									)
+									Spacer(Modifier.width(8.dp))
+									Text(
+										text = currentToast.first,
+										style = MaterialTheme.typography.bodySmall,
+										fontWeight = FontWeight.SemiBold,
+										color = Color.White,
+									)
+								}
+							}
+						}
+					}
+				}
 			}
 		}
 	}
 
 	override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
 		super.onViewCreated(view, savedInstanceState)
+		parentFragmentManager.setFragmentResultListener(
+			RestoreDialogFragment.RESULT_STARTED,
+			viewLifecycleOwner,
+		) { _, bundle ->
+			val capsuleSummary = bundle.getString(RestoreDialogFragment.KEY_CAPSULE_SUMMARY)
+			if (!capsuleSummary.isNullOrBlank()) {
+				showBottomCapsuleToast(capsuleSummary)
+			}
+		}
 		migrationManager.onStarted.observeEvent(viewLifecycleOwner) {
-			Toast.makeText(requireContext(), R.string.kotatsu_migration_started, Toast.LENGTH_SHORT).show()
+			showBottomCapsuleToast(getString(R.string.kotatsu_migration_started))
 		}
 		migrationManager.onCompleted.observeEvent(viewLifecycleOwner) { summary ->
 			requireContext().showKotatsuMigrationCompleteDialog(summary)
 		}
 	}
 
+	private fun showBottomCapsuleToast(message: String, isError: Boolean = false) {
+		capsuleToastState.value = message to isError
+	}
+
 	private fun confirmAndStartKotatsuMigration() {
 		if (migrationManager.isRunning) {
-			Toast.makeText(requireContext(), R.string.kotatsu_migration_running, Toast.LENGTH_SHORT).show()
+			showBottomCapsuleToast(getString(R.string.kotatsu_migration_running))
 			return
 		}
 		buildAlertDialog(requireContext()) {
@@ -170,7 +268,7 @@ class BackupSettingsFragment : BaseComposeSettingsFragment(R.string.backup_resto
 			setNegativeButton(android.R.string.cancel, null)
 			setPositiveButton(R.string.migrate_from_kotatsu) { _, _ ->
 				if (KotatsuMigrationService.start(requireContext())) {
-					Toast.makeText(requireContext(), R.string.kotatsu_migration_running, Toast.LENGTH_SHORT).show()
+					showBottomCapsuleToast(getString(R.string.kotatsu_migration_running))
 				}
 			}
 		}.show()
@@ -178,19 +276,21 @@ class BackupSettingsFragment : BaseComposeSettingsFragment(R.string.backup_resto
 
 	private fun runMihonExportJob(uri: Uri) {
 		lifecycleScope.launch {
-			val message = runCatching {
+			runCatching {
 				mihonExporter.export(uri)
 			}.fold(
 				onSuccess = { report ->
-					if (report.skippedCount > 0) {
+					val msg = if (report.skippedCount > 0) {
 						getString(R.string.export_to_mihon_done_partial, report.exportedCount, report.skippedCount)
 					} else {
 						getString(R.string.export_to_mihon_done, report.exportedCount)
 					}
+					showBottomCapsuleToast(msg)
 				},
-				onFailure = { it.getDisplayMessage(resources) },
+				onFailure = { err ->
+					showBottomCapsuleToast(err.getDisplayMessage(resources), isError = true)
+				},
 			)
-			Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
 		}
 	}
 
@@ -198,57 +298,49 @@ class BackupSettingsFragment : BaseComposeSettingsFragment(R.string.backup_resto
 		lifecycleScope.launch {
 			var restoreReport: RestoreReport? = null
 			val result = runCatching {
-				restoreReport = backupManager.restoreBackup(uri, options)
+				restoreReport = backupManager.restoreBackup(
+					uri = uri,
+					options = options,
+					onProgress = { done, total ->
+						tachibkProgressState.value = done to total
+					},
+				)
 			}
-			val message = result.fold(
-				onSuccess = { getString(R.string.data_restored_success) },
-				onFailure = { it.getDisplayMessage(resources) },
+			tachibkProgressState.value = null
+			result.fold(
+				onSuccess = {
+					val r = restoreReport
+					if (r != null) {
+						showBottomCapsuleToast(
+							getString(
+								R.string.restore_tachibk_capsule_summary,
+								r.restoredMangaCount,
+								r.restoredCategoriesCount,
+								r.restoredMergedLinksCount,
+							),
+						)
+						if (r.missingSources.isNotEmpty()) {
+							requireContext().showExtensionInstallPromptDialog(r.missingSources)
+						}
+					} else {
+						showBottomCapsuleToast(getString(R.string.data_restored_success))
+					}
+				},
+				onFailure = { err ->
+					showBottomCapsuleToast(err.getDisplayMessage(resources), isError = true)
+				},
 			)
-			Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
-			if (result.isSuccess) {
-				restoreReport?.let {
-					requireContext().showExtensionInstallPromptDialog(it.missingSources)
-					showRestoreNotification(it)
-				}
-			}
 		}
-	}
-
-	private fun showRestoreNotification(report: RestoreReport) {
-		val ctx = requireContext().applicationContext
-		val manager = NotificationManagerCompat.from(ctx)
-		val channel = NotificationChannelCompat.Builder(
-			RESTORE_CHANNEL_ID,
-			NotificationManagerCompat.IMPORTANCE_DEFAULT,
-		)
-			.setName(getString(R.string.backup_restore))
-			.setShowBadge(false)
-			.build()
-		manager.createNotificationChannel(channel)
-		if (!ctx.checkNotificationPermission(RESTORE_CHANNEL_ID)) return
-
-		val details = buildString {
-			append(getString(R.string.restore_report_restored_simple, report.restoredMangaCount))
-			if (report.missingSources.isNotEmpty()) {
-				append('\n')
-				append(report.missingSources.joinToString())
-			}
-		}
-		val notification = NotificationCompat.Builder(ctx, RESTORE_CHANNEL_ID)
-			.setSmallIcon(R.drawable.general_notification)
-			.setContentTitle(getString(R.string.data_restored_success))
-			.setContentText(details)
-			.setStyle(NotificationCompat.BigTextStyle().bigText(details))
-			.setAutoCancel(true)
-			.setPriority(NotificationCompat.PRIORITY_DEFAULT)
-			.setSilent(true)
-			.build()
-		manager.notify(RESTORE_NOTIFICATION_ID, notification)
 	}
 
 	companion object {
-		private const val RESTORE_CHANNEL_ID = "backup_restore"
-		private const val RESTORE_NOTIFICATION_ID = 7002
+		val BACKUP_PICKER_MIME_TYPES = arrayOf(
+			"*/*",
+			"application/octet-stream",
+			"application/gzip",
+			"application/x-gzip",
+			BackupUtils.MIME_TYPE,
+		)
 	}
 }
 
@@ -257,6 +349,7 @@ private fun BackupScreen(
 	onCreateBackup: () -> Unit,
 	onRestoreLocal: () -> Unit,
 	onOpenPeriodic: () -> Unit,
+	tachibkSubtitle: String,
 	onRestoreFromTachiyomi: () -> Unit,
 	migrationSubtitle: String,
 	onMigrateFromKotatsu: () -> Unit,
@@ -270,7 +363,6 @@ private fun BackupScreen(
 						title = stringResource(R.string.create_backup),
 						subtitle = stringResource(R.string.create_backup_summary),
 						icon = R.drawable.ic_save,
-						
 						shape = pos.shape,
 						onClick = onCreateBackup,
 					)
@@ -280,7 +372,6 @@ private fun BackupScreen(
 						title = stringResource(R.string.restore_backup),
 						subtitle = stringResource(R.string.restore_summary),
 						icon = R.drawable.ic_revert,
-						
 						shape = pos.shape,
 						onClick = onRestoreLocal,
 					)
@@ -290,7 +381,6 @@ private fun BackupScreen(
 						title = stringResource(R.string.periodic_backups),
 						subtitle = stringResource(R.string.periodic_backups_summary),
 						icon = R.drawable.ic_backup_restore,
-						
 						shape = pos.shape,
 						onClick = onOpenPeriodic,
 					)
@@ -303,9 +393,8 @@ private fun BackupScreen(
 				item { pos ->
 					ActionSettingsItem(
 						title = stringResource(R.string.restore_from_tachiyomi),
-						subtitle = stringResource(R.string.restore_tachiyomi_summary),
+						subtitle = tachibkSubtitle,
 						icon = R.drawable.ic_revert,
-
 						shape = pos.shape,
 						onClick = onRestoreFromTachiyomi,
 					)
@@ -315,7 +404,6 @@ private fun BackupScreen(
 						title = stringResource(R.string.migrate_from_kotatsu),
 						subtitle = migrationSubtitle,
 						icon = R.drawable.ic_backup_restore,
-
 						shape = pos.shape,
 						onClick = onMigrateFromKotatsu,
 					)
@@ -325,7 +413,6 @@ private fun BackupScreen(
 						title = stringResource(R.string.export_to_mihon),
 						subtitle = stringResource(R.string.export_to_mihon_summary),
 						icon = R.drawable.ic_upload_file,
-
 						shape = pos.shape,
 						onClick = onExportToMihon,
 					)

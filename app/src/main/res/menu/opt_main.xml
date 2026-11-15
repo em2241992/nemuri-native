@@ -6,8 +6,16 @@
 	<item
 		android:id="@+id/action_incognito"
 		android:checkable="true"
+		android:orderInCategory="90"
 		android:icon="@drawable/ic_incognito"
 		android:title="@string/incognito_mode"
+		app:showAsAction="never" />
+
+	<item
+		android:id="@+id/action_settings"
+		android:orderInCategory="100"
+		android:icon="@drawable/ic_settings"
+		android:title="@string/settings"
 		app:showAsAction="never" />
 
 </menu>

@@ -14,6 +14,46 @@ enum class AiBackendMode(
 	}
 }
 
+enum class AiComputeDelegate(
+	val id: String,
+	val label: String,
+	val shortBadge: String,
+) {
+	AUTO("AUTO", "Auto (NPU → GPU → CPU)", "Auto"),
+	GPU("GPU", "GPU (Vulkan / OpenCL)", "GPU"),
+	CPU("CPU", "CPU (Multi-Core)", "CPU"),
+	NPU("NPU", "NPU (AICore / Hexagon)", "NPU"),
+	;
+
+	companion object {
+		fun fromId(raw: String?): AiComputeDelegate = entries.firstOrNull { it.id == raw } ?: AUTO
+	}
+}
+
+enum class LocalModelFormat(
+	val displayLabel: String,
+) {
+	NONE("None"),
+	LITERT_LM("LiteRT-LM (.litertlm)"),
+	MEDIAPIPE_TASK("MediaPipe (.task)"),
+	GGUF("GGUF (.gguf)"),
+	OTHER("Local Weights"),
+	;
+
+	companion object {
+		fun fromFileName(fileName: String?): LocalModelFormat {
+			val lower = fileName?.trim()?.lowercase().orEmpty()
+			return when {
+				lower.isEmpty() -> NONE
+				lower.endsWith(".litertlm") -> LITERT_LM
+				lower.endsWith(".task") || lower.endsWith(".bin") -> MEDIAPIPE_TASK
+				lower.endsWith(".gguf") -> GGUF
+				else -> OTHER
+			}
+		}
+	}
+}
+
 enum class CloudAiProvider(
 	val id: String,
 	val label: String,
@@ -46,7 +86,8 @@ enum class OllamaEndpointPreset(
 	val label: String,
 	val baseUrl: String,
 ) {
-	LOCAL_TERMUX("127.0.0.1:11434", "http://127.0.0.1:11434"),
+	LOCAL_TERMUX("Ollama :11434", "http://127.0.0.1:11434"),
+	LLAMA_CPP_LOCAL("llama.cpp :8080", "http://127.0.0.1:8080/v1"),
 	HOME_LAN("LAN 192.168.1.x", "http://192.168.1.100:11434"),
 	EMULATOR_HOST("10.0.2.2:11434", "http://10.0.2.2:11434"),
 	LM_STUDIO("LM Studio :1234", "http://127.0.0.1:1234/v1"),
@@ -67,12 +108,15 @@ data class AiGenerationOutput(
 data class AiRouterConfig(
 	val masterAiEnabled: Boolean = true,
 	val backendMode: AiBackendMode = AiBackendMode.ON_DEVICE_LOCAL,
-	// Backend 1: On-Device Local (.litertlm / Android AICore)
+	// Backend 1: On-Device Local (.litertlm / .task / .gguf / Android AICore)
+	val computeDelegate: AiComputeDelegate = AiComputeDelegate.AUTO,
+	val resolvedActiveDelegate: AiComputeDelegate = AiComputeDelegate.GPU,
 	val localModelUri: String? = null,
 	val localModelFileName: String? = null,
 	val isAiCoreAvailable: Boolean = false,
+	val hasDedicatedNpu: Boolean = false,
 	val deviceHardwareSummary: String = "",
-	// Backend 2: Local Loopback / LAN (Ollama)
+	// Backend 2: Local Loopback / LAN (Ollama / llama.cpp)
 	val ollamaBaseUrl: String = "http://127.0.0.1:11434",
 	val ollamaModelId: String = "llama3.2:3b",
 	val ollamaApiKey: String = "",
@@ -89,13 +133,17 @@ data class AiRouterConfig(
 	val lastStatusMessage: String? = null,
 	val lastVerifiedSuccess: Boolean? = null,
 ) {
+	val localModelFormat: LocalModelFormat
+		get() = LocalModelFormat.fromFileName(localModelFileName)
+
 	fun activeAttributionBadge(): String = when (backendMode) {
 		AiBackendMode.ON_DEVICE_LOCAL -> when {
-			!localModelFileName.isNullOrBlank() -> "On-Device • $localModelFileName"
-			isAiCoreAvailable -> "On-Device • Gemini Nano (AICore)"
-			else -> "On-Device • Reading Trail"
+			!localModelFileName.isNullOrBlank() ->
+				"On-Device (${resolvedActiveDelegate.shortBadge}) • $localModelFileName"
+			hasDedicatedNpu && isAiCoreAvailable -> "On-Device • Gemini Nano (NPU)"
+			else -> "On-Device (${resolvedActiveDelegate.shortBadge}) • Reading Trail"
 		}
-		AiBackendMode.OLLAMA_LAN -> "Ollama • ${ollamaModelId.ifBlank { "local" }}"
+		AiBackendMode.OLLAMA_LAN -> "Local • ${ollamaModelId.ifBlank { "LAN" }}"
 		AiBackendMode.CLOUD_API -> when (cloudProvider) {
 			CloudAiProvider.GOOGLE_GEMINI -> GeminiCloudModel.fromModelId(geminiModelId).displayName
 			CloudAiProvider.OPENAI_COMPATIBLE -> "Cloud • ${openAiModelId.ifBlank { "OpenAI" }}"

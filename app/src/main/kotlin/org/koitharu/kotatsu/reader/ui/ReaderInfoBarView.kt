@@ -25,6 +25,7 @@ import androidx.core.graphics.withScale
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.prefs.PageCounterPlacement
 import org.koitharu.kotatsu.core.util.ext.getThemeColorStateList
 import org.koitharu.kotatsu.core.util.ext.isNightMode
 import org.koitharu.kotatsu.core.util.ext.measureDimension
@@ -239,21 +240,34 @@ class ReaderInfoBarView @JvmOverloads constructor(
 	}
 
 	@SuppressLint("StringFormatMatches")
-	fun update(state: ReaderUiState?) {
+	fun update(
+		state: ReaderUiState?,
+		placement: PageCounterPlacement = PageCounterPlacement.BOTTOM_CENTER,
+	) {
 		text = if (state != null) {
-			context.getString(
-				R.string.reader_info_pattern,
-				state.chapterNumber,
-				state.chaptersTotal,
-				// epub scroll mode: currentPage is chapter progress 0..1000, show as x/100;
-				// epub paged mode reports real page numbers, same as manga
-				if (state.isEpub && !state.isEpubPaged) state.currentPage / 10 else state.currentPage + 1,
-				if (state.isEpub && !state.isEpubPaged) 100 else state.totalPages,
-			) + if (state.percent in 0f..1f) {
+			val pageCurrent = if (state.isEpub && !state.isEpubPaged) state.currentPage / 10 else state.currentPage + 1
+			val pageTotal = if (state.isEpub && !state.isEpubPaged) 100 else state.totalPages
+			val baseSegment = if (placement.showsTopBarCounter) {
+				context.getString(
+					R.string.reader_info_pattern,
+					state.chapterNumber,
+					state.chaptersTotal,
+					pageCurrent,
+					pageTotal,
+				)
+			} else {
+				context.getString(
+					R.string.reader_info_chapter_only_pattern,
+					state.chapterNumber,
+					state.chaptersTotal,
+				)
+			}
+			val percentSegment = if (state.percent in 0f..1f) {
 				"     " + context.getString(R.string.percent_string_pattern, (state.percent * 100).format())
 			} else {
 				""
 			}
+			baseSegment + percentSegment
 		} else {
 			""
 		}
@@ -362,4 +376,27 @@ class ReaderInfoBarView @JvmOverloads constructor(
 	}.onFailure {
 		it.printStackTraceDebug()
 	}.getOrDefault(fallback)
+
+	companion object {
+		fun formatInfoText(
+			chapterNumber: Int,
+			chaptersTotal: Int,
+			pageCurrentOneBased: Int,
+			pageTotal: Int,
+			percent: Float,
+			placement: PageCounterPlacement,
+		): String {
+			val base = if (placement.showsTopBarCounter) {
+				"Ch. $chapterNumber/$chaptersTotal  ·  Pg. $pageCurrentOneBased/$pageTotal"
+			} else {
+				"Ch. $chapterNumber/$chaptersTotal"
+			}
+			val pct = if (percent in 0f..1f) {
+				"     ${(percent * 100f).format()}%"
+			} else {
+				""
+			}
+			return base + pct
+		}
+	}
 }

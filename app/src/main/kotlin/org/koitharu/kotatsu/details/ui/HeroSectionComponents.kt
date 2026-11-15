@@ -1,5 +1,7 @@
 package org.koitharu.kotatsu.details.ui
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -58,6 +60,8 @@ import org.koitharu.kotatsu.core.util.ext.mangaCoverDiskCacheKey
 import org.koitharu.kotatsu.core.util.ext.mangaSourceExtra
 import org.koitharu.kotatsu.core.util.ext.stableMangaCoverKey
 import org.koitharu.kotatsu.details.data.MangaDetails
+import org.koitharu.kotatsu.details.ui.model.HistoryInfo
+import org.koitharu.kotatsu.list.domain.ReadingProgress
 import org.koitharu.kotatsu.parsers.model.ContentRating
 import org.koitharu.kotatsu.parsers.model.Manga
 
@@ -65,6 +69,337 @@ private val COVER_WIDTH = 158.dp
 private val COVER_HEIGHT = 236.dp
 private val COMPACT_COVER_WIDTH = 120.dp
 private val COMPACT_COVER_HEIGHT = 178.dp
+private val ULTRA_COMPACT_COVER_WIDTH = 104.dp
+private val ULTRA_COMPACT_COVER_HEIGHT = 150.dp
+
+@Composable
+internal fun UltraCompactHeroAndActions(
+	manga: Manga,
+	details: MangaDetails,
+	historyInfo: HistoryInfo,
+	isLoading: Boolean,
+	sourceTitle: String?,
+	accent: Color,
+	imageLoader: ImageLoader,
+	coverUrl: String?,
+	favouriteLabel: String,
+	isFavourite: Boolean,
+	mergedSourcesCount: Int,
+	onFavouriteClick: () -> Unit,
+	onMergeClick: () -> Unit,
+	actions: DetailsExpressiveActions,
+) {
+	val ctx = LocalContext.current
+	val nsfwLabel = when (manga.contentRating) {
+		ContentRating.SUGGESTIVE -> "16+"
+		ContentRating.ADULT -> "18+"
+		else -> null
+	}
+	val totalChapters = historyInfo.totalChapters.coerceAtLeast(0)
+	val readChapters = if (historyInfo.currentChapter >= 0) {
+		(historyInfo.currentChapter + 1).coerceAtMost(totalChapters)
+	} else {
+		0
+	}
+	val unreadChapters = (totalChapters - readChapters).coerceAtLeast(0)
+	val displayPercent = if (ReadingProgress.isCompleted(historyInfo.percent)) {
+		100
+	} else {
+		(historyInfo.percent.coerceIn(0f, 1f) * 100f).toInt()
+	}
+	val currentChapterNumber = remember(details, historyInfo.history?.chapterId, historyInfo.currentChapter) {
+		val ch = details.allChapters.firstOrNull { it.id == historyInfo.history?.chapterId }
+		ch?.numberString() ?: if (historyInfo.currentChapter >= 0) (historyInfo.currentChapter + 1).toString() else null
+	}
+	val isChaptersLoading = isLoading && (historyInfo.totalChapters <= 0 || historyInfo.isChapterMissing)
+	val readEnabled = !isChaptersLoading && historyInfo.isValid
+	val primaryLabel = when {
+		isChaptersLoading -> stringResource(R.string.loading_)
+		historyInfo.canContinue && currentChapterNumber != null ->
+			stringResource(R.string.ultra_compact_continue_ch, currentChapterNumber)
+		historyInfo.canContinue -> stringResource(R.string._continue)
+		else -> stringResource(R.string.ultra_compact_start_reading)
+	}
+	val ctaColor = Color(0xFF5CE1E6)
+	val onCtaColor = Color(0xFF061014)
+
+	Column(
+		modifier = Modifier
+			.fillMaxWidth()
+			.padding(horizontal = 16.dp),
+		verticalArrangement = Arrangement.spacedBy(10.dp),
+	) {
+		Row(
+			modifier = Modifier.fillMaxWidth(),
+			verticalAlignment = Alignment.Top,
+		) {
+			CoverCard(
+				manga = manga,
+				sourceManga = details.sourceManga,
+				coverUrl = coverUrl,
+				imageLoader = imageLoader,
+				modifier = Modifier
+					.width(ULTRA_COMPACT_COVER_WIDTH)
+					.height(ULTRA_COMPACT_COVER_HEIGHT),
+				corner = 14.dp,
+				nsfwLabel = nsfwLabel,
+				forceRefresh = details.isLoaded,
+				actions = actions,
+			)
+			Spacer(Modifier.width(12.dp))
+			Column(
+				modifier = Modifier.weight(1f),
+				verticalArrangement = Arrangement.spacedBy(5.dp),
+			) {
+				Text(
+					text = manga.title,
+					style = MaterialTheme.typography.titleMedium.copy(
+						fontSize = 17.sp,
+						lineHeight = 21.sp,
+					),
+					fontWeight = FontWeight.Bold,
+					color = MaterialTheme.colorScheme.onSurface,
+					maxLines = 3,
+					overflow = TextOverflow.Ellipsis,
+					modifier = Modifier.clickable { actions.onTitleClick(manga.title) },
+				)
+				val authors = manga.authors.filter { it.isNotBlank() }
+				if (authors.isNotEmpty()) {
+					Text(
+						text = authors.joinToString(", "),
+						style = MaterialTheme.typography.labelMedium,
+						color = accent,
+						fontWeight = FontWeight.Medium,
+						maxLines = 1,
+						overflow = TextOverflow.Ellipsis,
+						modifier = Modifier.clickable { actions.onAuthorClick(authors.first()) },
+					)
+				}
+				Row(
+					horizontalArrangement = Arrangement.spacedBy(6.dp),
+					verticalAlignment = Alignment.CenterVertically,
+				) {
+					if (!manga.isLocal) {
+						val srcText = sourceTitle?.takeUnless { it.isBlank() } ?: manga.source.getTitle(ctx)
+						Surface(
+							onClick = { actions.onSourceClick(manga) },
+							shape = RoundedCornerShape(8.dp),
+							color = MaterialTheme.colorScheme.surfaceContainerHigh,
+							border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+						) {
+							Row(
+								modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+								verticalAlignment = Alignment.CenterVertically,
+								horizontalArrangement = Arrangement.spacedBy(5.dp),
+							) {
+								Text(
+									text = "EXT",
+									style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+									fontWeight = FontWeight.ExtraBold,
+									color = ctaColor,
+								)
+								Text(
+									text = "$srcText ▸",
+									style = MaterialTheme.typography.labelSmall,
+									fontWeight = FontWeight.SemiBold,
+									color = MaterialTheme.colorScheme.onSurface,
+									maxLines = 1,
+									overflow = TextOverflow.Ellipsis,
+								)
+							}
+						}
+					}
+					manga.state?.let { state ->
+						Surface(
+							shape = RoundedCornerShape(8.dp),
+							color = accent.copy(alpha = 0.14f),
+						) {
+							Text(
+								text = stringResource(state.titleResId),
+								style = MaterialTheme.typography.labelSmall,
+								fontWeight = FontWeight.Medium,
+								color = accent,
+								maxLines = 1,
+								modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
+							)
+						}
+					}
+				}
+				Spacer(Modifier.height(2.dp))
+				Surface(
+					onClick = actions.onChaptersClick,
+					shape = RoundedCornerShape(10.dp),
+					color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f),
+				) {
+					Text(
+						text = stringResource(
+							R.string.ultra_compact_meta_summary,
+							totalChapters,
+							unreadChapters,
+							displayPercent,
+						),
+						style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+						fontWeight = FontWeight.Medium,
+						color = MaterialTheme.colorScheme.onSurfaceVariant,
+						maxLines = 1,
+						overflow = TextOverflow.Ellipsis,
+						modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+					)
+				}
+			}
+		}
+
+		// Primary full-width Continue / Start Reading CTA
+		Surface(
+			shape = RoundedCornerShape(14.dp),
+			color = if (readEnabled) ctaColor else ctaColor.copy(alpha = 0.42f),
+			modifier = Modifier
+				.fillMaxWidth()
+				.height(44.dp),
+		) {
+			Row(
+				modifier = Modifier.fillMaxSize(),
+				verticalAlignment = Alignment.CenterVertically,
+			) {
+				Row(
+					modifier = Modifier
+						.weight(1f)
+						.fillMaxSize()
+						.clickable(enabled = readEnabled) { actions.onReadClick() }
+						.padding(horizontal = 16.dp),
+					verticalAlignment = Alignment.CenterVertically,
+					horizontalArrangement = Arrangement.Center,
+				) {
+					Icon(
+						painter = painterResource(R.drawable.ic_play),
+						contentDescription = null,
+						tint = onCtaColor,
+						modifier = Modifier.size(20.dp),
+					)
+					Spacer(Modifier.width(8.dp))
+					Text(
+						text = primaryLabel,
+						style = MaterialTheme.typography.titleSmall,
+						fontWeight = FontWeight.Bold,
+						color = onCtaColor,
+						maxLines = 1,
+						overflow = TextOverflow.Ellipsis,
+					)
+				}
+				if (readEnabled && !historyInfo.isIncognitoMode) {
+					Box(
+						modifier = Modifier
+							.width(1.dp)
+							.height(22.dp)
+							.background(onCtaColor.copy(alpha = 0.25f)),
+					)
+					Box(
+						modifier = Modifier
+							.width(44.dp)
+							.fillMaxSize()
+							.clickable { actions.onIncognitoClick() },
+						contentAlignment = Alignment.Center,
+					) {
+						Icon(
+							painter = painterResource(R.drawable.ic_incognito),
+							contentDescription = stringResource(R.string.incognito_mode),
+							tint = onCtaColor,
+							modifier = Modifier.size(19.dp),
+						)
+					}
+				}
+			}
+		}
+
+		// Secondary 2-button row: Merge / Migrate + In Library
+		Row(
+			modifier = Modifier.fillMaxWidth(),
+			horizontalArrangement = Arrangement.spacedBy(8.dp),
+			verticalAlignment = Alignment.CenterVertically,
+		) {
+			if (!manga.isLocal) {
+				val hasMerged = mergedSourcesCount > 0
+				Surface(
+					onClick = onMergeClick,
+					shape = RoundedCornerShape(12.dp),
+					color = if (hasMerged) accent.copy(alpha = 0.20f) else MaterialTheme.colorScheme.surfaceContainerHigh,
+					border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+					modifier = Modifier
+						.weight(1f)
+						.height(38.dp),
+				) {
+					Row(
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(horizontal = 10.dp),
+						verticalAlignment = Alignment.CenterVertically,
+						horizontalArrangement = Arrangement.Center,
+					) {
+						Icon(
+							painter = painterResource(R.drawable.ic_link),
+							contentDescription = null,
+							tint = if (hasMerged) accent else MaterialTheme.colorScheme.onSurface,
+							modifier = Modifier.size(16.dp),
+						)
+						Spacer(Modifier.width(6.dp))
+						Text(
+							text = if (hasMerged) {
+								stringResource(R.string.merge_count_badge, mergedSourcesCount)
+							} else {
+								stringResource(R.string.ultra_compact_merge_migrate)
+							},
+							style = MaterialTheme.typography.labelLarge,
+							fontWeight = FontWeight.SemiBold,
+							color = if (hasMerged) accent else MaterialTheme.colorScheme.onSurface,
+							maxLines = 1,
+							overflow = TextOverflow.Ellipsis,
+						)
+					}
+				}
+			}
+			Surface(
+				onClick = onFavouriteClick,
+				shape = RoundedCornerShape(12.dp),
+				color = if (isFavourite) accent.copy(alpha = 0.20f) else MaterialTheme.colorScheme.surfaceContainerHigh,
+				border = BorderStroke(
+					1.dp,
+					if (isFavourite) accent.copy(alpha = 0.55f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+				),
+				modifier = Modifier
+					.weight(1f)
+					.height(38.dp),
+			) {
+				Row(
+					modifier = Modifier
+						.fillMaxSize()
+						.padding(horizontal = 10.dp),
+					verticalAlignment = Alignment.CenterVertically,
+					horizontalArrangement = Arrangement.Center,
+				) {
+					Icon(
+						painter = painterResource(if (isFavourite) R.drawable.ic_check else R.drawable.ic_add),
+						contentDescription = null,
+						tint = if (isFavourite) accent else MaterialTheme.colorScheme.onSurface,
+						modifier = Modifier.size(16.dp),
+					)
+					Spacer(Modifier.width(6.dp))
+					Text(
+						text = if (isFavourite) {
+							favouriteLabel.takeIf { it.isNotBlank() } ?: stringResource(R.string.ultra_compact_in_library)
+						} else {
+							stringResource(R.string.ultra_compact_add_to_library)
+						},
+						style = MaterialTheme.typography.labelLarge,
+						fontWeight = FontWeight.SemiBold,
+						color = if (isFavourite) accent else MaterialTheme.colorScheme.onSurface,
+						maxLines = 1,
+						overflow = TextOverflow.Ellipsis,
+					)
+				}
+			}
+		}
+	}
+}
 
 @Composable
 internal fun HeroSection(

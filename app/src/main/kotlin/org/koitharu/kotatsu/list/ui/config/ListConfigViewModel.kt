@@ -41,6 +41,12 @@ class ListConfigViewModel @Inject constructor(
 			settings.gridSize = value
 		}
 
+	var gridColumnCount: Int
+		get() = settings.gridColumnCount
+		set(value) {
+			settings.gridColumnCount = value
+		}
+
 	var isTitleOverCover: Boolean
 		get() = settings.isTitleOverCover
 		set(value) {

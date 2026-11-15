@@ -4,8 +4,23 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
+import android.graphics.ColorSpace
+import android.graphics.HardwareRenderer
 import android.graphics.Paint
+import android.graphics.PixelFormat
+import android.graphics.RenderNode
+import android.hardware.HardwareBuffer
+import android.media.ImageReader
+import android.os.Build
+import androidx.annotation.RequiresApi
+import org.koitharu.kotatsu.core.os.HardwareAcceleratorProbe
+import org.koitharu.kotatsu.core.os.ResolvedUpscaleBackend
 import org.koitharu.kotatsu.core.prefs.ReaderUpscalePreset
+import org.koitharu.kotatsu.core.prefs.UpscaleComputeMode
+import java.util.concurrent.Callable
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -14,7 +29,10 @@ import kotlin.math.sqrt
 
 /**
  * Native 4-preset bitmap enhancement pipeline for Manga & Webtoon pages.
- * Includes strict dimension, aspect-ratio, and RAM budget guards so tall webtoon strips never OOM.
+ * - GPU delegate (`API 33+`): Anime4K AGSL `RuntimeShader` via [UpscaleEffect] + offscreen [HardwareRenderer] preview.
+ * - Multi-Core CPU delegate (`4–6` horizontal row-band worker threads): parallel luma + bilateral screentone
+ *   denoise + Anime4K edge unsharp mask for chipsets or modes without GPU shader execution.
+ * - Includes strict dimension, aspect-ratio, and RAM budget guards so tall webtoon strips never OOM.
  */
 object ReaderBitmapUpscaler {
 
@@ -22,6 +40,17 @@ object ReaderBitmapUpscaler {
 	private const val MAX_OUTPUT_PIXELS = 9_600_000L // ~38 MB ARGB_8888 ceiling
 	private const val MAX_PREVIEW_INPUT_SIDE_PX = 1280
 	private const val MIN_RAM_HEADROOM_MULTIPLIER = 3L
+	private const val MIN_PARALLEL_ROWS = 64
+
+	private val workerThreadCounter = AtomicInteger(1)
+	private val cpuWorkerCount: Int = HardwareAcceleratorProbe.recommendedCpuWorkerThreads()
+	private val cpuWorkerPool: ExecutorService by lazy {
+		Executors.newFixedThreadPool(cpuWorkerCount.coerceAtLeast(1)) { runnable ->
+			Thread(runnable, "NemuriUpscaleCpu-${workerThreadCounter.getAndIncrement()}").apply {
+				isDaemon = true
+			}
+		}
+	}
 
 	fun warmContrastColorMatrix(): ColorMatrix = ColorMatrix(
 		floatArrayOf(
@@ -95,10 +124,15 @@ object ReaderBitmapUpscaler {
 	 * Produces a fast, crisp enhanced bitmap specifically sized for interactive split-screen comparison.
 	 * Normalizes both [Original] (returned first) and [Enhanced] (returned second) to identical pixel
 	 * dimensions so left/right split clipping aligns pixel-for-pixel.
+	 *
+	 * When [computeMode] resolves to [ResolvedUpscaleBackend.GPU_AGSL] on API 33+, executes the live
+	 * Anime4K AGSL [UpscaleEffect] shader offscreen via [HardwareRenderer] + [ImageReader] and falls
+	 * back seamlessly to multi-core CPU bands if hardware buffer readback is unavailable.
 	 */
 	fun processForPreview(
 		rawSource: Bitmap,
 		preset: ReaderUpscalePreset,
+		computeMode: UpscaleComputeMode = UpscaleComputeMode.AUTO,
 	): Pair<Bitmap, Bitmap> {
 		val base = ensurePreviewSizedSoftwareBitmap(rawSource)
 		val effectivePreset = if (preset == ReaderUpscalePreset.OFF) {
@@ -106,13 +140,19 @@ object ReaderBitmapUpscaler {
 		} else {
 			preset
 		}
+		val resolvedBackend = HardwareAcceleratorProbe.resolveUpscaleBackend(computeMode)
+		if (resolvedBackend == ResolvedUpscaleBackend.GPU_AGSL && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+			val gpuEnhanced = renderOffscreenGpuAgsl(base, effectivePreset)
+			if (gpuEnhanced != null) {
+				return base to gpuEnhanced
+			}
+		}
+
 		if (effectivePreset == ReaderUpscalePreset.BEDTIME_WARM_CONTRAST) {
 			val warm = applyColorMatrixCopy(base, base.width, base.height, warmContrastColorMatrix())
 			return base to warm
 		}
 
-		// Simulate low-res sub-pixel softness vs crisp NPU/HQ upscale at identical output dimensions
-		// so even high-DPI covers/pages clearly demonstrate the preset's line-art & screentone restoration.
 		val targetW = base.width
 		val targetH = base.height
 		val enhanced = when (effectivePreset) {
@@ -130,6 +170,60 @@ object ReaderBitmapUpscaler {
 		}
 		return base to enhanced
 	}
+
+	@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+	private fun renderOffscreenGpuAgsl(
+		base: Bitmap,
+		preset: ReaderUpscalePreset,
+	): Bitmap? = runCatching {
+		val w = base.width
+		val h = base.height
+		if (w < 8 || h < 8) return@runCatching null
+		val effect = UpscaleEffect.create(scale = 2.0f, preset = preset) ?: return@runCatching null
+		val usage = HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE or HardwareBuffer.USAGE_GPU_COLOR_OUTPUT
+		val imageReader = ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 1, usage)
+		val renderNode = RenderNode("NemuriUpscalePreview")
+		val renderer = HardwareRenderer()
+		try {
+			renderNode.setPosition(0, 0, w, h)
+			renderNode.setRenderEffect(effect)
+			val recordingCanvas = renderNode.beginRecording(w, h)
+			try {
+				recordingCanvas.drawBitmap(base, 0f, 0f, null)
+			} finally {
+				renderNode.endRecording()
+			}
+			renderer.setSurface(imageReader.surface)
+			renderer.setContentRoot(renderNode)
+			val syncResult = renderer.createRenderRequest()
+				.setWaitForPresent(true)
+				.syncAndDraw()
+			if (syncResult and HardwareRenderer.SYNC_CONTEXT_IS_STOPPED != 0) {
+				return@runCatching null
+			}
+			val image = imageReader.acquireNextImage() ?: return@runCatching null
+			try {
+				val hwBuffer = image.hardwareBuffer ?: return@runCatching null
+				try {
+					val colorSpace = base.colorSpace ?: ColorSpace.get(ColorSpace.Named.SRGB)
+					val hwBitmap = Bitmap.wrapHardwareBuffer(hwBuffer, colorSpace) ?: return@runCatching null
+					try {
+						hwBitmap.copy(Bitmap.Config.ARGB_8888, false)
+					} finally {
+						hwBitmap.recycle()
+					}
+				} finally {
+					hwBuffer.close()
+				}
+			} finally {
+				image.close()
+			}
+		} finally {
+			renderer.destroy()
+			renderNode.discardDisplayList()
+			imageReader.close()
+		}
+	}.getOrNull()
 
 	private fun ensurePreviewSizedSoftwareBitmap(raw: Bitmap): Bitmap {
 		val maxSide = max(raw.width, raw.height)
@@ -179,8 +273,65 @@ object ReaderBitmapUpscaler {
 		return output
 	}
 
+	private fun computeLumaParallel(pixels: IntArray, luma: IntArray, count: Int) {
+		val bands = if (count >= MIN_PARALLEL_ROWS * 64 && cpuWorkerCount > 1) cpuWorkerCount else 1
+		if (bands <= 1) {
+			computeLumaRange(pixels, luma, 0, count)
+			return
+		}
+		val chunk = (count + bands - 1) / bands
+		val tasks = ArrayList<Callable<Unit>>(bands)
+		for (b in 0 until bands) {
+			val start = b * chunk
+			if (start >= count) break
+			val end = min(count, start + chunk)
+			tasks.add(
+				Callable {
+					computeLumaRange(pixels, luma, start, end)
+				},
+			)
+		}
+		cpuWorkerPool.invokeAll(tasks).forEach { it.get() }
+	}
+
+	private fun computeLumaRange(pixels: IntArray, luma: IntArray, start: Int, end: Int) {
+		for (i in start until end) {
+			val px = pixels[i]
+			val r = (px ushr 16) and 0xFF
+			val g = (px ushr 8) and 0xFF
+			val b = px and 0xFF
+			luma[i] = (77 * r + 150 * g + 29 * b) ushr 8
+		}
+	}
+
+	private fun runRowBandsParallel(interiorHeight: Int, block: (yStart: Int, yEnd: Int) -> Unit) {
+		val bands = if (interiorHeight >= MIN_PARALLEL_ROWS && cpuWorkerCount > 1) {
+			min(cpuWorkerCount, interiorHeight)
+		} else {
+			1
+		}
+		if (bands <= 1) {
+			block(1, 1 + interiorHeight)
+			return
+		}
+		val rowsPerBand = (interiorHeight + bands - 1) / bands
+		val tasks = ArrayList<Callable<Unit>>(bands)
+		for (b in 0 until bands) {
+			val yStart = 1 + b * rowsPerBand
+			val yMax = 1 + interiorHeight
+			if (yStart >= yMax) break
+			val yEnd = min(yMax, yStart + rowsPerBand)
+			tasks.add(
+				Callable {
+					block(yStart, yEnd)
+				},
+			)
+		}
+		cpuWorkerPool.invokeAll(tasks).forEach { it.get() }
+	}
+
 	/**
-	 * Fast single-pass 3x3 luma unsharp-mask / edge push in-place on [bitmap].
+	 * Multi-core parallel 3x3 luma unsharp-mask / Anime4K edge push in-place on [bitmap].
 	 */
 	private fun applyFastLumaUnsharpMask(
 		bitmap: Bitmap,
@@ -195,42 +346,38 @@ object ReaderBitmapUpscaler {
 		bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
 
 		val luma = IntArray(count)
-		for (i in 0 until count) {
-			val px = pixels[i]
-			val r = (px ushr 16) and 0xFF
-			val g = (px ushr 8) and 0xFF
-			val b = px and 0xFF
-			luma[i] = (77 * r + 150 * g + 29 * b) ushr 8
-		}
+		computeLumaParallel(pixels, luma, count)
 
-		for (y in 1 until h - 1) {
-			val rowOffset = y * w
-			for (x in 1 until w - 1) {
-				val idx = rowOffset + x
-				val centerL = luma[idx]
-				val neighborAvg = (
-					luma[idx - w] +
-						luma[idx + w] +
-						luma[idx - 1] +
-						luma[idx + 1]
-					) ushr 2
-				val diff = centerL - neighborAvg
-				if (abs(diff) <= threshold) continue
+		runRowBandsParallel(h - 2) { yStart, yEnd ->
+			for (y in yStart until yEnd) {
+				val rowOffset = y * w
+				for (x in 1 until w - 1) {
+					val idx = rowOffset + x
+					val centerL = luma[idx]
+					val neighborAvg = (
+						luma[idx - w] +
+							luma[idx + w] +
+							luma[idx - 1] +
+							luma[idx + 1]
+						) ushr 2
+					val diff = centerL - neighborAvg
+					if (abs(diff) <= threshold) continue
 
-				val delta = (diff * amount).roundToInt()
-				val px = pixels[idx]
-				val a = px and -0x1000000
-				val r = (((px ushr 16) and 0xFF) + delta).coerceIn(0, 255)
-				val g = (((px ushr 8) and 0xFF) + delta).coerceIn(0, 255)
-				val b = ((px and 0xFF) + delta).coerceIn(0, 255)
-				pixels[idx] = a or (r shl 16) or (g shl 8) or b
+					val delta = (diff * amount).roundToInt()
+					val px = pixels[idx]
+					val a = px and -0x1000000
+					val r = (((px ushr 16) and 0xFF) + delta).coerceIn(0, 255)
+					val g = (((px ushr 8) and 0xFF) + delta).coerceIn(0, 255)
+					val b = ((px and 0xFF) + delta).coerceIn(0, 255)
+					pixels[idx] = a or (r shl 16) or (g shl 8) or b
+				}
 			}
 		}
 		bitmap.setPixels(pixels, 0, w, 0, 0, w, h)
 	}
 
 	/**
-	 * 2.0x HQ Line-Art pass:
+	 * Multi-core parallel 2.0x HQ Line-Art pass:
 	 * 1) Edge-preserving 3x3 bilateral screentone/JPEG mosquito de-noise on midtones where local gradient is low.
 	 * 2) High-precision ink edge sharpening where gradient crosses ink strokes.
 	 */
@@ -246,47 +393,43 @@ object ReaderBitmapUpscaler {
 		bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
 
 		val luma = IntArray(count)
-		for (i in 0 until count) {
-			val px = pixels[i]
-			val r = (px ushr 16) and 0xFF
-			val g = (px ushr 8) and 0xFF
-			val b = px and 0xFF
-			luma[i] = (77 * r + 150 * g + 29 * b) ushr 8
-		}
+		computeLumaParallel(pixels, luma, count)
 
-		for (y in 1 until h - 1) {
-			val row = y * w
-			for (x in 1 until w - 1) {
-				val idx = row + x
-				val cL = luma[idx]
-				val nT = luma[idx - w]
-				val nB = luma[idx + w]
-				val nL = luma[idx - 1]
-				val nR = luma[idx + 1]
-				val nTL = luma[idx - w - 1]
-				val nTR = luma[idx - w + 1]
-				val nBL = luma[idx + w - 1]
-				val nBR = luma[idx + w + 1]
+		runRowBandsParallel(h - 2) { yStart, yEnd ->
+			for (y in yStart until yEnd) {
+				val row = y * w
+				for (x in 1 until w - 1) {
+					val idx = row + x
+					val cL = luma[idx]
+					val nT = luma[idx - w]
+					val nB = luma[idx + w]
+					val nL = luma[idx - 1]
+					val nR = luma[idx + 1]
+					val nTL = luma[idx - w - 1]
+					val nTR = luma[idx - w + 1]
+					val nBL = luma[idx + w - 1]
+					val nBR = luma[idx + w + 1]
 
-				val avg8 = (nT + nB + nL + nR + nTL + nTR + nBL + nBR) ushr 3
-				val grad = max(abs(nR - nL), abs(nB - nT))
-				val diff = cL - avg8
+					val avg8 = (nT + nB + nL + nR + nTL + nTR + nBL + nBR) ushr 3
+					val grad = max(abs(nR - nL), abs(nB - nT))
+					val diff = cL - avg8
 
-				val delta = when {
-					// Screentone / JPEG grain region: gentle bilateral smoothing
-					grad < 22 && abs(diff) in 2..18 && cL in 24..232 -> -(diff shr 1)
-					// True ink edge: crisp Anime4K-style unsharp push
-					abs(diff) > 6 -> (diff * sharpenAmount).roundToInt()
-					else -> 0
+					val delta = when {
+						// Screentone / JPEG grain region: gentle bilateral smoothing
+						grad < 22 && abs(diff) in 2..18 && cL in 24..232 -> -(diff shr 1)
+						// True ink edge: crisp Anime4K-style unsharp push
+						abs(diff) > 6 -> (diff * sharpenAmount).roundToInt()
+						else -> 0
+					}
+					if (delta == 0) continue
+
+					val px = pixels[idx]
+					val a = px and -0x1000000
+					val r = (((px ushr 16) and 0xFF) + delta).coerceIn(0, 255)
+					val g = (((px ushr 8) and 0xFF) + delta).coerceIn(0, 255)
+					val b = ((px and 0xFF) + delta).coerceIn(0, 255)
+					pixels[idx] = a or (r shl 16) or (g shl 8) or b
 				}
-				if (delta == 0) continue
-
-				val px = pixels[idx]
-				val a = px and -0x1000000
-				val r = (((px ushr 16) and 0xFF) + delta).coerceIn(0, 255)
-				val g = (((px ushr 8) and 0xFF) + delta).coerceIn(0, 255)
-				val b = ((px and 0xFF) + delta).coerceIn(0, 255)
-				pixels[idx] = a or (r shl 16) or (g shl 8) or b
 			}
 		}
 		bitmap.setPixels(pixels, 0, w, 0, 0, w, h)

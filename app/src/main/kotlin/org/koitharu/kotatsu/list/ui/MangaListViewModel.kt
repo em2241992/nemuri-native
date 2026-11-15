@@ -42,6 +42,11 @@ abstract class MangaListViewModel(
 		key = AppSettings.KEY_GRID_SIZE,
 		valueProducer = { gridSize / 100f },
 	)
+	val gridColumnCount = settings.observeAsStateFlow(
+		scope = viewModelScope + Dispatchers.Default,
+		key = AppSettings.KEY_GRID_SPAN_COUNT,
+		valueProducer = { gridColumnCount },
+	)
 
 	val isIncognitoModeEnabled: Boolean
 		get() = settings.isIncognitoModeEnabled

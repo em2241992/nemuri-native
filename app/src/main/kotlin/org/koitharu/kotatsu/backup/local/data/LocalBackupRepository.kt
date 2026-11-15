@@ -477,11 +477,10 @@ class LocalBackupRepository @Inject constructor(
 	// data worth keeping, so drop it after restore; a populated one is left untouched.
 	private suspend fun removeEmptyReadLaterCategory() {
 		runCatchingCancellable {
-			val readLaterTitle = context.getString(R.string.read_later)
 			val dao = database.getFavouriteCategoriesDao()
-			val readLater = dao.findAll().firstOrNull { it.title == readLaterTitle } ?: return
-			if (database.getFavouritesDao().findAll(readLater.categoryId.toLong()).isEmpty()) {
-				dao.delete(readLater.categoryId.toLong())
+			val legacyReadLater = dao.findAll().firstOrNull { it.title.equals("Read later", ignoreCase = true) } ?: return
+			if (database.getFavouritesDao().findAll(legacyReadLater.categoryId.toLong()).isEmpty()) {
+				dao.delete(legacyReadLater.categoryId.toLong())
 			}
 		}
 	}

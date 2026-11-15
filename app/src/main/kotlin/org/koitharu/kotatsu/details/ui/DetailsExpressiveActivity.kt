@@ -5,10 +5,13 @@ import android.os.Bundle
 import android.view.View
 import android.widget.Toast
 import androidx.activity.viewModels
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.unit.Density
 import androidx.core.graphics.ColorUtils
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -24,6 +27,7 @@ import org.koitharu.kotatsu.core.nav.ReaderIntent
 import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.core.os.AppShortcutManager
 import org.koitharu.kotatsu.core.prefs.AppSettings
+import org.koitharu.kotatsu.core.prefs.DetailsUiMode
 import org.koitharu.kotatsu.core.ui.BaseActivity
 import org.koitharu.kotatsu.core.ui.util.MenuInvalidator
 import org.koitharu.kotatsu.core.ui.util.ReversibleActionObserver
@@ -40,6 +44,8 @@ import org.koitharu.kotatsu.parsers.model.ContentRating
 import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.settings.compose.rememberBooleanPref
 import org.koitharu.kotatsu.settings.compose.rememberDetailsBackdropBlurPref
+import org.koitharu.kotatsu.settings.compose.rememberIntPref
+import org.koitharu.kotatsu.settings.compose.rememberStringPref
 import coil3.ImageLoader
 import javax.inject.Inject
 
@@ -176,7 +182,7 @@ class DetailsExpressiveActivity :
 		)
 		viewBinding.composeView.setContent {
 			org.koitharu.kotatsu.settings.compose.DropSauceTheme {
-				val density = androidx.compose.ui.platform.LocalDensity.current
+				val baseDensity = LocalDensity.current
 				val details by viewModel.mangaDetails.collectAsState()
 				val history by viewModel.historyInfo.collectAsState()
 				val whereWasIRecap by viewModel.whereWasIRecapState.collectAsState()
@@ -194,31 +200,50 @@ class DetailsExpressiveActivity :
 
 				val isBackdropEnabled by rememberBooleanPref(AppSettings.KEY_DETAILS_BACKDROP, true)
 				val backdropBlurAmount by rememberDetailsBackdropBlurPref(AppSettings.KEY_DETAILS_BACKDROP_BLUR_AMOUNT, 2)
-
-				DetailsExpressiveScreen(
-					details = details,
-					tags = tags,
-					historyInfo = history,
-					whereWasIRecapState = whereWasIRecap,
-					isLoading = loading,
-					favouriteCount = favs.size,
-					favouriteLabel = favLabel,
-					mergedSourcesCount = mergedSources.count { it.enabled },
-					scrobblings = scrob,
-					related = related,
-					localSize = localSize,
-					sourceTitle = srcTitle,
-					imageLoader = coil,
-					coverUrl = coverUrl,
-					backdropUrl = backdropUrl,
-					isBackdropEnabled = isBackdropEnabled,
-					backdropBlurAmount = backdropBlurAmount,
-					style = settings.detailsUiMode,
-					topInset = with(density) { topInset.intValue.toDp() },
-					bottomContentPadding = with(density) { bottomInset.intValue.toDp() },
-					onScroll = ::onContentScroll,
-					actions = actions,
+				val uiModeName by rememberStringPref(AppSettings.KEY_DETAILS_UI, DetailsUiMode.ULTRA_COMPACT.name)
+				val detailsScalePercent by rememberIntPref(AppSettings.KEY_DETAILS_SCALE, 100)
+				val uiMode = DetailsUiMode.entries.firstOrNull { it.name == uiModeName } ?: DetailsUiMode.ULTRA_COMPACT
+				val scaleFactor = (detailsScalePercent / 100f).coerceIn(0.80f, 1.15f)
+				val scaledDensity = Density(
+					density = baseDensity.density * scaleFactor,
+					fontScale = baseDensity.fontScale * scaleFactor,
 				)
+				val toolbarScaleCompensationDp = with(scaledDensity) {
+					if (scaleFactor < 1f) {
+						((58f * baseDensity.density) * (1f - scaleFactor)).toDp()
+					} else {
+						with(baseDensity) { 0.toDp() }
+					}
+				}
+				val topInsetDp = with(scaledDensity) { topInset.intValue.toDp() } + toolbarScaleCompensationDp
+				val bottomInsetDp = with(scaledDensity) { bottomInset.intValue.toDp() }
+
+				CompositionLocalProvider(LocalDensity provides scaledDensity) {
+					DetailsExpressiveScreen(
+						details = details,
+						tags = tags,
+						historyInfo = history,
+						whereWasIRecapState = whereWasIRecap,
+						isLoading = loading,
+						favouriteCount = favs.size,
+						favouriteLabel = favLabel,
+						mergedSourcesCount = mergedSources.count { it.enabled },
+						scrobblings = scrob,
+						related = related,
+						localSize = localSize,
+						sourceTitle = srcTitle,
+						imageLoader = coil,
+						coverUrl = coverUrl,
+						backdropUrl = backdropUrl,
+						isBackdropEnabled = isBackdropEnabled,
+						backdropBlurAmount = backdropBlurAmount,
+						style = uiMode,
+						topInset = topInsetDp,
+						bottomContentPadding = bottomInsetDp,
+						onScroll = ::onContentScroll,
+						actions = actions,
+					)
+				}
 			}
 		}
 	}

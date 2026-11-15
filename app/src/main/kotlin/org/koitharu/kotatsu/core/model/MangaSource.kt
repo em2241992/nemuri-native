@@ -52,6 +52,8 @@ fun MangaSource(name: String?): MangaSource {
 	when (name ?: return UnknownMangaSource) {
 		UnknownMangaSource.name -> return UnknownMangaSource
 		LocalMangaSource.name -> return LocalMangaSource
+		"MANGADEX" -> return MihonExtensionManager.getById(2499283573021220255L)
+			?: MissingMangaSource("MANGADEX", "MangaDex")
 	}
 	if (name.startsWith("MIHON_")) {
 		val sourceId = name.removePrefix("MIHON_").substringBefore(':').toLongOrNull()

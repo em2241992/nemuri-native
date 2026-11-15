@@ -1,9 +1,12 @@
 package org.koitharu.kotatsu.core.prefs
 
 enum class DetailsUiMode {
-	/** Compose layout with a large cover centered above the title (the default, showcase style). */
-	EXPRESSIVE,
+	/** Ultra-dense Nemuri Obsidian layout: 104dp cover, inline stats pill, full-width Continue CTA, 26dp tag pills. */
+	ULTRA_COMPACT,
 
-	/** Compose layout with a compact cover on the side next to the title and info. */
+	/** Compact cover on side next to title and info. */
 	COMPACT,
+
+	/** Large cover centered above title. */
+	EXPRESSIVE,
 }

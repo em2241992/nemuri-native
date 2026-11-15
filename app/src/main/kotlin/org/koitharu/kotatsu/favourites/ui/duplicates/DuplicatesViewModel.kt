@@ -52,6 +52,7 @@ class DuplicatesViewModel @Inject constructor(
 	val state: StateFlow<DuplicatesState> = _state
 
 	val onFinished = MutableEventFlow<List<Manga>>()
+	val onAddedToDefault = MutableEventFlow<Int>()
 	val onMigrated = MutableEventFlow<MigrationResult>()
 	val onMerged = MutableEventFlow<MigrationResult>()
 
@@ -188,6 +189,16 @@ class DuplicatesViewModel @Inject constructor(
 		chaptersJob?.cancel()
 		val next = queue.firstOrNull()
 		if (next == null) {
+			if (
+				accepted.isNotEmpty() &&
+				accepted.none { favouritesRepository.isFavorite(it.id) } &&
+				!favouritesRepository.hasCustomCategories()
+			) {
+				favouritesRepository.addToDefaultCategory(accepted)
+				onAddedToDefault.call(accepted.size)
+				onFinished.call(emptyList())
+				return
+			}
 			onFinished.call(accepted)
 			return
 		}

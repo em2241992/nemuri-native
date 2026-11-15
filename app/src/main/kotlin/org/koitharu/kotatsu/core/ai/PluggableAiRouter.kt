@@ -21,6 +21,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import org.koitharu.kotatsu.core.network.BaseHttpClient
+import org.koitharu.kotatsu.core.os.HardwareAcceleratorProbe
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.parsers.util.runCatchingCancellable
 import java.io.File
@@ -94,8 +95,33 @@ class PluggableAiRouter @Inject constructor(
 		}
 	}
 
+	fun setComputeDelegate(delegate: AiComputeDelegate) {
+		settings.aiComputeDelegate = delegate.id
+		val caps = HardwareAcceleratorProbe.inspect(context)
+		val chain = HardwareAcceleratorProbe.resolveAiDelegateChain(
+			requested = delegate,
+			hasExposedNpu = caps.hasDedicatedExposedNpu,
+			hasGpuCompute = caps.isVulkanComputeAvailable,
+		)
+		val activeDelegate = chain.firstOrNull() ?: AiComputeDelegate.CPU
+		val fallbackHint = if (delegate == AiComputeDelegate.NPU && !caps.hasDedicatedExposedNpu) {
+			"NPU runtime unavailable on ${caps.socModel.ifBlank { Build.MODEL }} — falling back to ${activeDelegate.shortBadge}"
+		} else {
+			"Compute delegate: ${delegate.shortBadge} (active: ${activeDelegate.shortBadge})"
+		}
+		_configFlow.update {
+			it.copy(
+				computeDelegate = delegate,
+				resolvedActiveDelegate = activeDelegate,
+				hasDedicatedNpu = caps.hasDedicatedExposedNpu,
+				deviceHardwareSummary = caps.summaryLine(),
+				lastStatusMessage = fallbackHint,
+			)
+		}
+	}
+
 	/**
-	 * Persists a read-only SAF grant for a user-selected `.litertlm` or `.task` model file.
+	 * Persists a read-only SAF grant for a user-selected `.litertlm`, `.task`, or `.gguf` model file.
 	 */
 	fun setLocalModelSafUri(uri: Uri?): String {
 		if (uri == null) {
@@ -105,10 +131,10 @@ class PluggableAiRouter @Inject constructor(
 				it.copy(
 					localModelUri = null,
 					localModelFileName = null,
-					lastStatusMessage = "Cleared local .litertlm model selection",
+					lastStatusMessage = "Cleared local model weights selection",
 				)
 			}
-			return "Cleared local .litertlm model selection"
+			return "Cleared local model weights selection"
 		}
 		runCatching {
 			context.contentResolver.takePersistableUriPermission(
@@ -122,7 +148,8 @@ class PluggableAiRouter @Inject constructor(
 			?: "local_model.litertlm"
 		settings.aiLocalModelUri = uri.toString()
 		settings.aiLocalModelName = resolvedName
-		val status = "Selected local model: $resolvedName"
+		val format = LocalModelFormat.fromFileName(resolvedName)
+		val status = "Selected ${format.displayLabel}: $resolvedName"
 		_configFlow.update {
 			it.copy(
 				localModelUri = uri.toString(),
@@ -333,24 +360,52 @@ class PluggableAiRouter @Inject constructor(
 		cfg: AiRouterConfig,
 		startMs: Long,
 	): AiConnectionTestResult {
+		val caps = HardwareAcceleratorProbe.inspect(context)
+		val delegateChain = HardwareAcceleratorProbe.resolveAiDelegateChain(
+			requested = cfg.computeDelegate,
+			hasExposedNpu = caps.hasDedicatedExposedNpu,
+			hasGpuCompute = caps.isVulkanComputeAvailable,
+		)
+		val primaryDelegate = delegateChain.firstOrNull() ?: AiComputeDelegate.CPU
+		val cascadeLabel = delegateChain.joinToString(" → ") { it.shortBadge }
 		val uriStr = cfg.localModelUri
 		if (!uriStr.isNullOrBlank()) {
 			val uri = runCatching { Uri.parse(uriStr) }.getOrNull()
 			val pfd = uri?.let { runCatching { context.contentResolver.openFileDescriptor(it, "r") }.getOrNull() }
 			if (pfd != null) {
 				val sizeMb = pfd.use { fd -> (fd.statSize.coerceAtLeast(0L)) / (1024L * 1024L) }
+				val modelLabel = cfg.localModelFileName ?: "local.litertlm"
+				val format = LocalModelFormat.fromFileName(modelLabel)
+				if (format == LocalModelFormat.GGUF && uri != null) {
+					val validGguf = verifyGgufHeaderMagic(uri)
+					val latency = (SystemClock.elapsedRealtime() - startMs).coerceAtLeast(1L)
+					return if (!validGguf) {
+						AiConnectionTestResult(
+							success = false,
+							latencyMs = latency,
+							activeModel = modelLabel,
+							message = "Invalid GGUF header in $modelLabel — verify file integrity",
+						)
+					} else {
+						AiConnectionTestResult(
+							success = true,
+							latencyMs = latency,
+							activeModel = "$modelLabel (${primaryDelegate.shortBadge})",
+							message = "Verified GGUF $modelLabel (${sizeMb} MB) • Cascade [$cascadeLabel] ready ($latency ms)",
+						)
+					}
+				}
 				val runtimePresent = isMediaPipeLlmRuntimePresent()
 				val latency = (SystemClock.elapsedRealtime() - startMs).coerceAtLeast(1L)
-				val modelLabel = cfg.localModelFileName ?: "local.litertlm"
 				val detail = if (runtimePresent) {
-					"Verified $modelLabel (${sizeMb} MB) • MediaPipe GenAI active ($latency ms)"
+					"Verified $modelLabel (${sizeMb} MB) • MediaPipe [$cascadeLabel] active ($latency ms)"
 				} else {
-					"SAF verified $modelLabel (${sizeMb} MB) • Offline Reading Trail active ($latency ms)"
+					"SAF verified $modelLabel (${sizeMb} MB) • Cascade [$cascadeLabel] + Reading Trail ready ($latency ms)"
 				}
 				return AiConnectionTestResult(
 					success = true,
 					latencyMs = latency,
-					activeModel = modelLabel,
+					activeModel = "$modelLabel (${primaryDelegate.shortBadge})",
 					message = detail,
 				)
 			} else {
@@ -359,29 +414,40 @@ class PluggableAiRouter @Inject constructor(
 					success = false,
 					latencyMs = latency,
 					activeModel = "Unreadable SAF URI",
-					message = "Selected .litertlm file permission expired — please re-select via SAF picker",
+					message = "Selected model file permission expired — please re-select via SAF picker",
 				)
 			}
 		}
 
-		val aiCore = detectAiCorePackage()
 		val latency = (SystemClock.elapsedRealtime() - startMs).coerceAtLeast(1L)
-		return if (aiCore) {
+		return if (caps.hasDedicatedExposedNpu && caps.isAiCoreAvailable) {
 			AiConnectionTestResult(
 				success = true,
 				latencyMs = latency,
-				activeModel = "AICore / Reading Trail",
-				message = "Android AICore detected on ${Build.MODEL} • Offline Reading Trail ready ($latency ms)",
+				activeModel = "AICore (NPU) / Reading Trail",
+				message = "Android AICore NPU detected on ${Build.MODEL} • Cascade [$cascadeLabel] ready ($latency ms)",
 			)
 		} else {
 			AiConnectionTestResult(
 				success = true,
 				latencyMs = latency,
-				activeModel = "Offline Reading Trail",
-				message = "On-Device Reading Trail ready ($latency ms) • Pick a .litertlm file or switch to Ollama/Cloud for neural prose",
+				activeModel = "${primaryDelegate.shortBadge} • Reading Trail",
+				message = "Delegate cascade [$cascadeLabel] ready ($latency ms) • Pick .litertlm / .task / .gguf or use Local/Cloud",
 			)
 		}
 	}
+
+	private fun verifyGgufHeaderMagic(uri: Uri): Boolean = runCatching {
+		context.contentResolver.openInputStream(uri)?.use { stream ->
+			val magic = ByteArray(4)
+			val read = stream.read(magic)
+			read == 4 &&
+				magic[0] == 'G'.code.toByte() &&
+				magic[1] == 'G'.code.toByte() &&
+				magic[2] == 'U'.code.toByte() &&
+				magic[3] == 'F'.code.toByte()
+		} ?: false
+	}.getOrDefault(false)
 
 	private fun verifyOllamaBackend(
 		cfg: AiRouterConfig,
@@ -492,21 +558,32 @@ class PluggableAiRouter @Inject constructor(
 		maxTokens: Int,
 	): AiGenerationOutput {
 		val uriStr = cfg.localModelUri
-		if (!uriStr.isNullOrBlank() && isMediaPipeLlmRuntimePresent()) {
+		val format = LocalModelFormat.fromFileName(cfg.localModelFileName)
+		if (!uriStr.isNullOrBlank() && format != LocalModelFormat.GGUF && isMediaPipeLlmRuntimePresent()) {
 			val uri = Uri.parse(uriStr)
 			val stagedPath = stageSafModelForMediaPipeIfNeeded(uri, cfg.localModelFileName)
 			if (stagedPath != null) {
-				val generated = invokeMediaPipeLlmReflection(
-					modelPath = stagedPath,
-					prompt = "$systemInstruction\n\n$userPrompt",
-					temperature = temperature,
-					maxTokens = maxTokens,
+				val caps = HardwareAcceleratorProbe.inspect(context)
+				val delegateChain = HardwareAcceleratorProbe.resolveAiDelegateChain(
+					requested = cfg.computeDelegate,
+					hasExposedNpu = caps.hasDedicatedExposedNpu,
+					hasGpuCompute = caps.isVulkanComputeAvailable,
 				)
-				if (!generated.isNullOrBlank()) {
-					return AiGenerationOutput(
-						text = generated.trim(),
-						backendAttribution = "On-Device • ${cfg.localModelFileName ?: "LiteRT-LM"}",
+				for (candidateDelegate in delegateChain) {
+					val generated = invokeMediaPipeLlmReflection(
+						modelPath = stagedPath,
+						prompt = "$systemInstruction\n\n$userPrompt",
+						temperature = temperature,
+						maxTokens = maxTokens,
+						preferredDelegate = candidateDelegate,
 					)
+					if (!generated.isNullOrBlank()) {
+						_configFlow.update { it.copy(resolvedActiveDelegate = candidateDelegate) }
+						return AiGenerationOutput(
+							text = generated.trim(),
+							backendAttribution = "On-Device (${candidateDelegate.shortBadge}) • ${cfg.localModelFileName ?: "LiteRT-LM"}",
+						)
+					}
 				}
 			}
 		}
@@ -793,16 +870,24 @@ class PluggableAiRouter @Inject constructor(
 	}
 
 	private fun loadPersistedConfig(): AiRouterConfig {
-		val aiCore = detectAiCorePackage()
-		val soc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Build.SOC_MODEL else Build.HARDWARE
-		val hwSummary = "${Build.MANUFACTURER.replaceFirstChar { it.titlecase(Locale.ROOT) }} ${Build.MODEL} ($soc)"
+		val caps = HardwareAcceleratorProbe.inspect(context)
+		val requestedDelegate = AiComputeDelegate.fromId(settings.aiComputeDelegate)
+		val delegateChain = HardwareAcceleratorProbe.resolveAiDelegateChain(
+			requested = requestedDelegate,
+			hasExposedNpu = caps.hasDedicatedExposedNpu,
+			hasGpuCompute = caps.isVulkanComputeAvailable,
+		)
+		val activeDelegate = delegateChain.firstOrNull() ?: AiComputeDelegate.CPU
 		return AiRouterConfig(
 			masterAiEnabled = settings.isAiMasterEnabled,
 			backendMode = AiBackendMode.fromId(settings.aiBackendMode),
+			computeDelegate = requestedDelegate,
+			resolvedActiveDelegate = activeDelegate,
 			localModelUri = settings.aiLocalModelUri,
 			localModelFileName = settings.aiLocalModelName,
-			isAiCoreAvailable = aiCore,
-			deviceHardwareSummary = hwSummary,
+			isAiCoreAvailable = caps.isAiCoreAvailable,
+			hasDedicatedNpu = caps.hasDedicatedExposedNpu,
+			deviceHardwareSummary = caps.summaryLine(),
 			ollamaBaseUrl = settings.aiOllamaBaseUrl,
 			ollamaModelId = settings.aiOllamaModelId,
 			ollamaApiKey = credentialStore.ollamaApiKey,
@@ -814,14 +899,6 @@ class PluggableAiRouter @Inject constructor(
 			openAiModelId = settings.aiOpenAiModelId,
 			openAiApiKey = credentialStore.openAiApiKey,
 		)
-	}
-
-	private fun detectAiCorePackage(): Boolean {
-		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return false
-		return runCatching {
-			context.packageManager.getPackageInfo("com.google.android.aicore", 0)
-			true
-		}.getOrDefault(false)
 	}
 
 	private fun isMediaPipeLlmRuntimePresent(): Boolean = runCatching {
@@ -847,6 +924,7 @@ class PluggableAiRouter @Inject constructor(
 		prompt: String,
 		temperature: Float,
 		maxTokens: Int,
+		preferredDelegate: AiComputeDelegate,
 	): String? = runCatching {
 		val inferenceClass = Class.forName("com.google.mediapipe.tasks.genai.llminference.LlmInference")
 		val optionsClass = Class.forName("com.google.mediapipe.tasks.genai.llminference.LlmInference\$LlmInferenceOptions")
@@ -855,6 +933,21 @@ class PluggableAiRouter @Inject constructor(
 		builderClass.getMethod("setModelPath", String::class.java).invoke(builder, modelPath)
 		runCatching { builderClass.getMethod("setMaxTokens", Int::class.javaPrimitiveType).invoke(builder, maxTokens) }
 		runCatching { builderClass.getMethod("setTemperature", Float::class.javaPrimitiveType).invoke(builder, temperature) }
+		runCatching {
+			val backendEnumClass = Class.forName(
+				"com.google.mediapipe.tasks.genai.llminference.LlmInference\$Backend",
+			)
+			val enumName = when (preferredDelegate) {
+				AiComputeDelegate.NPU -> "NPU"
+				AiComputeDelegate.GPU -> "GPU"
+				AiComputeDelegate.CPU -> "CPU"
+				AiComputeDelegate.AUTO -> "DEFAULT"
+			}
+			val enumValue = backendEnumClass.enumConstants?.firstOrNull { (it as Enum<*>).name == enumName }
+			if (enumValue != null) {
+				builderClass.getMethod("setPreferredBackend", backendEnumClass).invoke(builder, enumValue)
+			}
+		}
 		val options = builderClass.getMethod("build").invoke(builder)
 		val createMethod = inferenceClass.getMethod("createFromOptions", Context::class.java, optionsClass)
 		val instance = createMethod.invoke(null, context, options) as AutoCloseable

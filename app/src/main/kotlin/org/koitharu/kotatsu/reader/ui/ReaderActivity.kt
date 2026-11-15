@@ -299,6 +299,9 @@ class ReaderActivity :
             updateVerticalScrubberLayout()
             updateZoomAndScrubberVisibility()
         }
+        viewModel.pageCounterPlacement.observe(this) { placement ->
+            viewBinding.infoBar.update(viewModel.uiState.value, placement)
+        }
         viewModel.isChapterTransitionsEnabled.observe(this) { enabled ->
             if (!enabled) {
                 chapterTransitionFlow.value = null
@@ -743,6 +746,7 @@ class ReaderActivity :
             isUiVisibleFlow.value = isUiVisible
             updateScrollTimerButton()
             updateZoomAndScrubberVisibility()
+            updateZoomControlOffset(isUiVisible = isUiVisible, animate = isAnimated)
             updateTimerPanelOffset(animate = isAnimated)
             systemUiController.setSystemUiVisible(isUiVisible || !isFullscreen)
             if (!isAnimated) {
@@ -762,9 +766,10 @@ class ReaderActivity :
             ?: 0
         viewBinding.zoomControl.updateLayoutParams<ViewGroup.MarginLayoutParams> {
             val density = resources.displayMetrics.density
-            bottomMargin = tappableInsets.bottom + (84f * density).roundToInt()
+            bottomMargin = tappableInsets.bottom + (38f * density).roundToInt()
             marginEnd = systemBars.right + (12f * density).roundToInt()
         }
+        updateZoomControlOffset(isUiVisible = viewBinding.appbarTop.isVisible, animate = false)
         updateVerticalScrubberLayout()
         viewBinding.toolbar.updateLayoutParams<ViewGroup.MarginLayoutParams> {
             topMargin = systemBars.top
@@ -943,7 +948,7 @@ class ReaderActivity :
     private fun onUiStateChanged(pair: Pair<ReaderUiState?, ReaderUiState?>) {
         val (previous: ReaderUiState?, uiState: ReaderUiState?) = pair
         title = uiState?.mangaName ?: getString(R.string.loading_)
-        viewBinding.infoBar.update(uiState)
+        viewBinding.infoBar.update(uiState, viewModel.pageCounterPlacement.value)
         if (uiState == null) {
             supportActionBar?.subtitle = null
             viewBinding.actionsView.setSliderValue(0, 1)
@@ -1120,7 +1125,7 @@ class ReaderActivity :
             setContent {
                 DropSauceTheme {
                     val uiState by viewModel.uiState.collectAsState()
-                    val showPageNumbers by viewModel.isPagesNumbersEnabled.collectAsState()
+                    val counterPlacement by viewModel.pageCounterPlacement.collectAsState()
                     val isUiOpen by isUiVisibleFlow.collectAsState()
                     val bottomInsetPx by visibleNavBottomPxFlow.collectAsState()
                     val warmAmberEnabled by viewModel.isWarmAmberEnabled.collectAsState()
@@ -1129,7 +1134,7 @@ class ReaderActivity :
 
                     ReaderPassiveHudOverlay(
                         uiState = uiState,
-                        isPagesNumbersEnabled = showPageNumbers,
+                        isPagesNumbersEnabled = counterPlacement.showsBottomCounter,
                         isBottomToolbarVisible = isUiOpen && viewBinding.toolbarDocked != null,
                         bottomSystemInsetPx = bottomInsetPx,
                         isWarmAmberEnabled = warmAmberEnabled,
@@ -1257,6 +1262,21 @@ class ReaderActivity :
             viewBinding.appbarTop.isVisible &&
             !modalOpen &&
             sliderAvailable
+    }
+
+    private fun updateZoomControlOffset(isUiVisible: Boolean, animate: Boolean) {
+        val density = resources.displayMetrics.density
+        // Resting at 38dp above nav bar when bottom reader toolbar is hidden; rises to 84dp (+46dp) when visible
+        val targetY = if (isUiVisible) -(46f * density) else 0f
+        viewBinding.zoomControl.animate().cancel()
+        if (animate) {
+            viewBinding.zoomControl.animate()
+                .translationY(targetY)
+                .setDuration(200L)
+                .start()
+        } else {
+            viewBinding.zoomControl.translationY = targetY
+        }
     }
 
     private fun updateVerticalScrubberLayout() {

@@ -55,6 +55,11 @@ class PageViewModel(
 		}
 	}
 
+	fun reloadFromCacheForUpscaleChange(page: MangaPage) {
+		loader.invalidateTask(page.id)
+		onBind(page)
+	}
+
 	fun retry(page: MangaPage, isFromUser: Boolean) {
 		val prevJob = job
 		job = scope.launch {

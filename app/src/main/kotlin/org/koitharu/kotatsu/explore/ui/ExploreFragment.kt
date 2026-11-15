@@ -150,6 +150,8 @@ class ExploreFragment :
 		)
 		with(recyclerView) {
 			this.adapter = adapter
+			this.itemAnimator = null
+			this.isNestedScrollingEnabled = false
 			SpanSizeResolver(this, resources.getDimensionPixelSize(R.dimen.explore_grid_width)).attach()
 			addItemDecoration(TypedListSpacingDecoration(context, false))
 			checkNotNull(sourceSelectionController).attachToRecyclerView(this)
@@ -229,11 +231,12 @@ class ExploreFragment :
 	override fun onApplyWindowInsets(v: View, insets: WindowInsetsCompat): WindowInsetsCompat {
 		barsInsets = insets.systemBarsInsets
 		val basePadding = v.resources.getDimensionPixelOffset(R.dimen.list_spacing_normal)
+		val floatingDockClearance = (88f * v.resources.displayMetrics.density).toInt()
 		viewBinding?.layoutContent?.setPadding(
 			/* left = */ barsInsets.left + basePadding,
 			/* top = */ basePadding,
 			/* right = */ barsInsets.right + basePadding,
-			/* bottom = */ barsInsets.bottom + basePadding,
+			/* bottom = */ maxOf(barsInsets.bottom + basePadding, barsInsets.bottom + floatingDockClearance),
 		)
 		return insets.consumeAllSystemBarsInsets()
 	}
@@ -255,12 +258,17 @@ class ExploreFragment :
 		val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
 		val height = pages.maxOf { page ->
 			page?.let {
+				(it.layoutManager as? GridLayoutManager)?.spanSizeLookup?.apply {
+					invalidateSpanIndexCache()
+					invalidateSpanGroupIndexCache()
+				}
 				it.measure(widthSpec, heightSpec)
 				it.measuredHeight
 			} ?: 0
 		}
 		if (height > 0 && binding.pager.layoutParams.height != height) {
 			binding.pager.updateLayoutParams { this.height = height }
+			pages.forEach { it?.requestLayout() }
 		}
 	}
 

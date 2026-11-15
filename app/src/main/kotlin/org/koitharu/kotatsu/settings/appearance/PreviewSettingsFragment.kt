@@ -89,6 +89,7 @@ import org.koitharu.kotatsu.settings.compose.SliderSettingsItem
 import org.koitharu.kotatsu.settings.compose.SwitchSettingsItem
 import org.koitharu.kotatsu.settings.compose.rememberBooleanPref
 import org.koitharu.kotatsu.settings.compose.rememberDetailsBackdropBlurPref
+import org.koitharu.kotatsu.settings.compose.rememberIntPref
 import org.koitharu.kotatsu.settings.compose.rememberStringPref
 
 @AndroidEntryPoint
@@ -111,7 +112,8 @@ class PreviewSettingsFragment : BaseComposeSettingsFragment(R.string.details_app
 @Composable
 private fun DetailsAppearanceScreen() {
 	val ctx = LocalContext.current
-	var uiMode by rememberStringPref(AppSettings.KEY_DETAILS_UI, DetailsUiMode.COMPACT.name)
+	var uiMode by rememberStringPref(AppSettings.KEY_DETAILS_UI, DetailsUiMode.ULTRA_COMPACT.name)
+	var detailsScale by rememberIntPref(AppSettings.KEY_DETAILS_SCALE, 100)
 	var backdrop by rememberBooleanPref(AppSettings.KEY_DETAILS_BACKDROP, true)
 	var backdropBlurAmount by rememberDetailsBackdropBlurPref(AppSettings.KEY_DETAILS_BACKDROP_BLUR_AMOUNT, 2)
 
@@ -127,6 +129,19 @@ private fun DetailsAppearanceScreen() {
 		item { Spacer(Modifier.height(8.dp).fillMaxWidth()) }
 		item {
 			SettingsGroup {
+				item { pos ->
+					SliderSettingsItem(
+						title = stringResource(R.string.details_scale_title),
+						value = detailsScale,
+						valueFrom = 80,
+						valueTo = 115,
+						stepSize = 5,
+						unitSuffix = "%",
+						onValueChange = { detailsScale = it },
+						icon = R.drawable.ic_zoom_in,
+						shape = pos.shape,
+					)
+				}
 				item { pos ->
 					SwitchSettingsItem(
 						title = stringResource(R.string.details_backdrop),
@@ -205,17 +220,20 @@ private fun DetailsStylePicker(
 			Row(
 				modifier = Modifier
 					.fillMaxWidth()
-					.padding(horizontal = 16.dp)
+					.padding(horizontal = 12.dp)
 					.selectableGroup(),
-				horizontalArrangement = Arrangement.spacedBy(12.dp),
+				horizontalArrangement = Arrangement.spacedBy(8.dp),
 			) {
-				// Compact first (the default for new installs), then Centralized.
-				for (mode in arrayOf(DetailsUiMode.COMPACT, DetailsUiMode.EXPRESSIVE)) {
+				for (mode in arrayOf(DetailsUiMode.ULTRA_COMPACT, DetailsUiMode.COMPACT, DetailsUiMode.EXPRESSIVE)) {
 					DetailsStyleOption(
 						label = stringResource(
-							if (mode == DetailsUiMode.COMPACT) R.string.details_ui_compact else R.string.details_ui_expressive,
+							when (mode) {
+								DetailsUiMode.ULTRA_COMPACT -> R.string.details_ui_ultra_compact
+								DetailsUiMode.COMPACT -> R.string.details_ui_compact
+								DetailsUiMode.EXPRESSIVE -> R.string.details_ui_expressive
+							},
 						),
-						centered = mode != DetailsUiMode.COMPACT,
+						mode = mode,
 						selected = mode.name == selected,
 						backdrop = backdrop,
 						blurAmount = blurAmount,
@@ -234,7 +252,7 @@ private fun DetailsStylePicker(
 @Composable
 private fun DetailsStyleOption(
 	label: String,
-	centered: Boolean,
+	mode: DetailsUiMode,
 	selected: Boolean,
 	backdrop: Boolean,
 	blurAmount: Int,
@@ -261,14 +279,14 @@ private fun DetailsStyleOption(
 			val scale = screenWidth / PHONE_WIDTH
 			Surface(
 				modifier = Modifier.size(screenWidth + BEZEL * 2, PHONE_HEIGHT * scale + BEZEL * 2),
-				shape = RoundedCornerShape(26.dp),
+				shape = RoundedCornerShape(22.dp),
 				color = scheme.surfaceContainerHighest,
 				border = BorderStroke(if (selected) 2.dp else 1.dp, borderColor),
 			) {
 				Box(
 					modifier = Modifier
 						.padding(BEZEL)
-						.clip(RoundedCornerShape(26.dp - BEZEL)),
+						.clip(RoundedCornerShape(22.dp - BEZEL)),
 					contentAlignment = Alignment.Center,
 				) {
 					Box(
@@ -279,7 +297,7 @@ private fun DetailsStyleOption(
 								scaleY = scale
 							},
 					) {
-						PreviewScreen(centered = centered, backdrop = backdrop, blurAmount = blurAmount)
+						PreviewScreen(mode = mode, backdrop = backdrop, blurAmount = blurAmount)
 					}
 					// ponytail: swallows touches so the real (clickable) components inside stay inert;
 					// the tap still reaches the option's selectable
@@ -287,13 +305,13 @@ private fun DetailsStyleOption(
 				}
 			}
 		}
-		Spacer(Modifier.height(8.dp))
+		Spacer(Modifier.height(6.dp))
 		Row(verticalAlignment = Alignment.CenterVertically) {
 			RadioButton(selected = selected, onClick = null)
-			Spacer(Modifier.width(8.dp))
+			Spacer(Modifier.width(4.dp))
 			Text(
 				text = label,
-				style = MaterialTheme.typography.labelLarge,
+				style = MaterialTheme.typography.labelMedium,
 				fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
 				color = if (selected) scheme.primary else scheme.onSurface,
 				maxLines = 1,
@@ -303,7 +321,7 @@ private fun DetailsStyleOption(
 }
 
 @Composable
-private fun PreviewScreen(centered: Boolean, backdrop: Boolean, blurAmount: Int) {
+private fun PreviewScreen(mode: DetailsUiMode, backdrop: Boolean, blurAmount: Int) {
 	val scheme = MaterialTheme.colorScheme
 	val accent = scheme.primary
 	Box(
@@ -319,22 +337,37 @@ private fun PreviewScreen(centered: Boolean, backdrop: Boolean, blurAmount: Int)
 				.wrapContentHeight(Alignment.Top, unbounded = true),
 			horizontalAlignment = Alignment.CenterHorizontally,
 		) {
-			// Same offsets as DetailsExpressiveScreen: hero clears the status bar + translucent top bar.
-			Spacer(Modifier.height(STATUS_BAR + if (centered) 84.dp else 72.dp))
-			if (centered) {
-				CenteredHero(accent)
-				Spacer(Modifier.height(20.dp))
-				FavouriteButton(
-					label = stringResource(R.string.add_to_favourites),
-					isFavourite = false,
-					accent = accent,
-					onClick = {},
-				)
-			} else {
-				CompactHero(accent)
+			Spacer(
+				Modifier.height(
+					STATUS_BAR + when (mode) {
+						DetailsUiMode.ULTRA_COMPACT -> 58.dp
+						DetailsUiMode.COMPACT -> 72.dp
+						DetailsUiMode.EXPRESSIVE -> 84.dp
+					},
+				),
+			)
+			when (mode) {
+				DetailsUiMode.ULTRA_COMPACT -> {
+					UltraCompactPreviewHero(accent)
+				}
+				DetailsUiMode.COMPACT -> {
+					CompactHero(accent)
+					Spacer(Modifier.height(8.dp))
+					PreviewProgressCard(accent)
+				}
+				DetailsUiMode.EXPRESSIVE -> {
+					CenteredHero(accent)
+					Spacer(Modifier.height(20.dp))
+					FavouriteButton(
+						label = stringResource(R.string.add_to_favourites),
+						isFavourite = false,
+						accent = accent,
+						onClick = {},
+					)
+					Spacer(Modifier.height(8.dp))
+					PreviewProgressCard(accent)
+				}
 			}
-			Spacer(Modifier.height(8.dp))
-			PreviewProgressCard(accent)
 			PreviewDescriptionCard(accent)
 			PreviewTags(accent)
 		}
@@ -350,7 +383,9 @@ private fun PreviewScreen(centered: Boolean, backdrop: Boolean, blurAmount: Int)
 			verticalArrangement = Arrangement.spacedBy(12.dp),
 		) {
 			ChaptersPill(count = 120, onClick = {})
-			PreviewReadFab(accent)
+			if (mode != DetailsUiMode.ULTRA_COMPACT) {
+				PreviewReadFab(accent)
+			}
 		}
 		Bar(
 			modifier = Modifier
@@ -359,6 +394,51 @@ private fun PreviewScreen(centered: Boolean, backdrop: Boolean, blurAmount: Int)
 				.size(108.dp, 4.dp),
 			color = scheme.onSurface.copy(alpha = 0.35f),
 		)
+	}
+}
+
+@Composable
+private fun UltraCompactPreviewHero(accent: Color) {
+	val scheme = MaterialTheme.colorScheme
+	Column(
+		modifier = Modifier
+			.fillMaxWidth()
+			.padding(horizontal = 16.dp),
+		verticalArrangement = Arrangement.spacedBy(10.dp),
+	) {
+		Row(
+			modifier = Modifier
+				.fillMaxWidth()
+				.height(148.dp),
+		) {
+			PreviewCover(
+				Modifier
+					.width(104.dp)
+					.fillMaxHeight(),
+				corner = 14.dp,
+			)
+			Spacer(Modifier.width(12.dp))
+			Column(
+				Modifier
+					.weight(1f)
+					.fillMaxHeight(),
+				verticalArrangement = Arrangement.SpaceBetween,
+			) {
+				Column {
+					TextBar(width = 180.dp, lineHeight = 24.dp, barHeight = 16.dp, color = scheme.onSurface)
+					Spacer(Modifier.height(4.dp))
+					TextBar(width = 100.dp, lineHeight = 16.dp, barHeight = 10.dp, color = accent)
+					Spacer(Modifier.height(8.dp))
+					PreviewSourcePill()
+				}
+				Bar(Modifier.fillMaxWidth().height(12.dp), scheme.onSurfaceVariant.copy(alpha = 0.35f))
+			}
+		}
+		Surface(shape = RoundedCornerShape(14.dp), color = accent) {
+			Box(Modifier.fillMaxWidth().height(42.dp), contentAlignment = Alignment.Center) {
+				Bar(Modifier.size(120.dp, 12.dp), if (accent.luminanceIsLight()) Color.Black else Color.White)
+			}
+		}
 	}
 }
 

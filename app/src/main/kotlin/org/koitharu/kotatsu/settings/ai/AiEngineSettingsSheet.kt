@@ -92,11 +92,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.ai.AiBackendMode
+import org.koitharu.kotatsu.core.ai.AiComputeDelegate
 import org.koitharu.kotatsu.core.ai.AiRouterConfig
 import org.koitharu.kotatsu.core.ai.CloudAiProvider
 import org.koitharu.kotatsu.core.ai.GeminiCloudModel
 import org.koitharu.kotatsu.core.ai.OllamaEndpointPreset
 import org.koitharu.kotatsu.core.ai.PluggableAiRouter
+import androidx.compose.ui.text.style.TextAlign
 import org.koitharu.kotatsu.settings.compose.BaseComposeSettingsFragment
 import org.koitharu.kotatsu.settings.compose.DropSauceTheme
 import javax.inject.Inject
@@ -373,6 +375,10 @@ fun AiEngineRouterPane(
 				when (config.backendMode) {
 					AiBackendMode.ON_DEVICE_LOCAL -> OnDeviceConfigCard(
 						config = config,
+						onSelectDelegate = { delegate ->
+							router.setComputeDelegate(delegate)
+							showCapsuleToast("Hardware delegate: ${delegate.label}")
+						},
 						onPickSafModel = { safLauncher.launch(arrayOf("*/*")) },
 						onClearSafModel = {
 							val msg = router.setLocalModelSafUri(null)
@@ -637,6 +643,7 @@ private fun BackendOptionCard(
 @Composable
 private fun OnDeviceConfigCard(
 	config: AiRouterConfig,
+	onSelectDelegate: (AiComputeDelegate) -> Unit,
 	onPickSafModel: () -> Unit,
 	onClearSafModel: () -> Unit,
 ) {
@@ -665,17 +672,17 @@ private fun OnDeviceConfigCard(
 				)
 				Surface(
 					shape = RoundedCornerShape(50),
-					color = if (config.isAiCoreAvailable) {
+					color = if (config.hasDedicatedNpu && config.isAiCoreAvailable) {
 						VerifiedEmerald.copy(alpha = 0.16f)
 					} else {
-						NemuriCyan.copy(alpha = 0.12f)
+						NemuriCyan.copy(alpha = 0.14f)
 					},
 				) {
 					Text(
-						text = if (config.isAiCoreAvailable) "AICore Detected" else "Extractive Ready",
+						text = "Active: ${config.resolvedActiveDelegate.shortBadge}",
 						style = MaterialTheme.typography.labelSmall,
 						fontWeight = FontWeight.SemiBold,
-						color = if (config.isAiCoreAvailable) VerifiedEmerald else NemuriCyan,
+						color = if (config.hasDedicatedNpu && config.isAiCoreAvailable) VerifiedEmerald else NemuriCyan,
 						modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
 					)
 				}
@@ -687,6 +694,53 @@ private fun OnDeviceConfigCard(
 				fontFamily = FontFamily.Monospace,
 				color = NemuriMuted,
 			)
+
+			// 4-Way Hardware Compute Delegate Selector (Auto / GPU / CPU / NPU)
+			Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+				Text(
+					text = stringResource(R.string.ai_delegate_section_title),
+					style = MaterialTheme.typography.labelMedium,
+					fontWeight = FontWeight.SemiBold,
+					color = NemuriMuted,
+				)
+				Row(
+					modifier = Modifier.fillMaxWidth(),
+					horizontalArrangement = Arrangement.spacedBy(6.dp),
+				) {
+					AiComputeDelegate.entries.forEach { delegate ->
+						val selected = config.computeDelegate == delegate
+						Surface(
+							shape = RoundedCornerShape(10.dp),
+							color = if (selected) NemuriCyan.copy(alpha = 0.18f) else ObsidianInputBg,
+							border = BorderStroke(
+								1.dp,
+								if (selected) NemuriCyan else Color.White.copy(alpha = 0.08f),
+							),
+							modifier = Modifier
+								.weight(1f)
+								.clip(RoundedCornerShape(10.dp))
+								.clickable { onSelectDelegate(delegate) },
+						) {
+							Text(
+								text = delegate.shortBadge,
+								style = MaterialTheme.typography.labelSmall,
+								fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+								color = if (selected) NemuriCyan else Color(0xFFD5DAE5),
+								textAlign = TextAlign.Center,
+								maxLines = 1,
+								modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+							)
+						}
+					}
+				}
+				if (!config.hasDedicatedNpu) {
+					Text(
+						text = "Non-NPU chipset detected — Auto cascades directly across GPU → Multi-Core CPU",
+						style = MaterialTheme.typography.labelSmall,
+						color = NemuriMuted,
+					)
+				}
+			}
 
 			Surface(
 				shape = RoundedCornerShape(12.dp),
@@ -709,7 +763,7 @@ private fun OnDeviceConfigCard(
 					Spacer(Modifier.width(10.dp))
 					Column(modifier = Modifier.weight(1f)) {
 						Text(
-							text = config.localModelFileName ?: "No .litertlm / .task model selected",
+							text = config.localModelFileName ?: "No .litertlm / .task / .gguf model selected",
 							style = MaterialTheme.typography.bodySmall,
 							fontWeight = FontWeight.SemiBold,
 							color = Color.White,

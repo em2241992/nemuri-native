@@ -189,6 +189,35 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		get() = prefs.getInt(KEY_GRID_SIZE, 100)
 		set(value) = prefs.edit { putInt(KEY_GRID_SIZE, value) }
 
+	var gridColumnCount: Int
+		get() {
+			if (prefs.contains(KEY_GRID_SPAN_COUNT)) {
+				return prefs.getInt(KEY_GRID_SPAN_COUNT, 3).coerceIn(2, 6)
+			}
+			val legacyPct = gridSize
+			return when {
+				legacyPct >= 130 -> 2
+				legacyPct >= 90 -> 3
+				legacyPct >= 70 -> 4
+				legacyPct >= 56 -> 5
+				else -> 6
+			}
+		}
+		set(value) {
+			val clamped = value.coerceIn(2, 6)
+			val mappedScale = when (clamped) {
+				2 -> 140
+				3 -> 100
+				4 -> 76
+				5 -> 60
+				else -> 50
+			}
+			prefs.edit {
+				putInt(KEY_GRID_SPAN_COUNT, clamped)
+				putInt(KEY_GRID_SIZE, mappedScale)
+			}
+		}
+
 	// Global UI scale as a percent (85 = smaller, 100 = default, 115 = larger). Applied by overriding
 	// densityDpi in BaseActivity.attachBaseContext, so it scales everything. It sits on top of the
 	// automatic per-screen baseline there, so 100 means "the reference look" on every device.
@@ -487,9 +516,15 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 
 	val previewUpscalePreset: ReaderUpscalePreset
 		get() {
+			val rawName = prefs.getString(KEY_READER_UPSCALE_PRESET, null)
+			if (rawName == "FAST_ANIME4K_1_5X") return ReaderUpscalePreset.FAST_NPU_1_5X
 			val stored = prefs.getEnumValue(KEY_READER_UPSCALE_PRESET, ReaderUpscalePreset.FAST_NPU_1_5X)
 			return if (stored == ReaderUpscalePreset.OFF) ReaderUpscalePreset.FAST_NPU_1_5X else stored
 		}
+
+	var readerUpscaleComputeMode: UpscaleComputeMode
+		get() = prefs.getEnumValue(KEY_READER_UPSCALE_COMPUTE_MODE, UpscaleComputeMode.AUTO)
+		set(value) = prefs.edit { putEnumValue(KEY_READER_UPSCALE_COMPUTE_MODE, value) }
 
 	var isChapterJumpDialogEnabled: Boolean
 		get() = prefs.getBoolean(KEY_CHAPTER_JUMP_DIALOG, true)
@@ -624,8 +659,12 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		set(value) = prefs.edit { putEnumValue(KEY_PROGRESS_INDICATORS, value) }
 
 	var detailsUiMode: DetailsUiMode
-		get() = prefs.getEnumValue(KEY_DETAILS_UI, COMPACT)
+		get() = prefs.getEnumValue(KEY_DETAILS_UI, DetailsUiMode.ULTRA_COMPACT)
 		set(value) = prefs.edit { putEnumValue(KEY_DETAILS_UI, value) }
+
+	var detailsContentScalePercent: Int
+		get() = prefs.getInt(KEY_DETAILS_SCALE, 100).coerceIn(80, 115)
+		set(value) = prefs.edit { putInt(KEY_DETAILS_SCALE, value.coerceIn(80, 115)) }
 
 	var incognitoModeForNsfw: TriStateOption
 		get() = prefs.getEnumValue(KEY_INCOGNITO_NSFW, TriStateOption.ASK)
@@ -922,9 +961,18 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 	}
 
 
+	var pageCounterPlacement: PageCounterPlacement
+		get() = prefs.getEnumValue(KEY_PAGE_COUNTER_PLACEMENT, PageCounterPlacement.BOTTOM_CENTER)
+		set(value) = prefs.edit {
+			putEnumValue(KEY_PAGE_COUNTER_PLACEMENT, value)
+			putBoolean(KEY_PAGES_NUMBERS, value.showsBottomCounter)
+		}
+
 	var isPagesNumbersEnabled: Boolean
-		get() = prefs.getBoolean(KEY_PAGES_NUMBERS, false)
-		set(value) = prefs.edit { putBoolean(KEY_PAGES_NUMBERS, value) }
+		get() = pageCounterPlacement.showsBottomCounter
+		set(value) {
+			pageCounterPlacement = if (value) PageCounterPlacement.BOTTOM_CENTER else PageCounterPlacement.HIDDEN
+		}
 
 	val screenshotsPolicy: ScreenshotsPolicy
 		get() = prefs.getEnumValue(KEY_SCREENSHOTS_POLICY, ScreenshotsPolicy.ALLOW)
@@ -990,8 +1038,9 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 			return string.split(',').mapToSet { it.trim() }
 		}
 
-	val isReaderBarEnabled: Boolean
+	var isReaderBarEnabled: Boolean
 		get() = prefs.getBoolean(KEY_READER_BAR, true)
+		set(value) = prefs.edit { putBoolean(KEY_READER_BAR, value) }
 
 	var isReaderKeepScreenOn: Boolean
 		get() = prefs.getBoolean(KEY_READER_SCREEN_ON, true)
@@ -1350,6 +1399,14 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 			?: "gpt-4o-mini"
 		set(value) = prefs.edit { putString(KEY_AI_OPENAI_MODEL_ID, value.trim()) }
 
+	var aiComputeDelegate: String
+		get() = prefs.getString(KEY_AI_COMPUTE_DELEGATE, "AUTO") ?: "AUTO"
+		set(value) = prefs.edit { putString(KEY_AI_COMPUTE_DELEGATE, value) }
+
+	var isExploreMultiLangTipDismissed: Boolean
+		get() = prefs.getBoolean(KEY_EXPLORE_MULTILANG_TIP_DISMISSED, false)
+		set(value) = prefs.edit { putBoolean(KEY_EXPLORE_MULTILANG_TIP_DISMISSED, value) }
+
 	fun subscribe(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
 		prefs.registerOnSharedPreferenceChangeListener(listener)
 	}
@@ -1657,6 +1714,12 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		const val KEY_AI_GEMINI_MODEL_ID = "nemuri_ai_gemini_model_id"
 		const val KEY_AI_OPENAI_BASE_URL = "nemuri_ai_openai_base_url"
 		const val KEY_AI_OPENAI_MODEL_ID = "nemuri_ai_openai_model_id"
+		const val KEY_AI_COMPUTE_DELEGATE = "nemuri_ai_compute_delegate"
+		const val KEY_GRID_SPAN_COUNT = "grid_span_count"
+		const val KEY_DETAILS_SCALE = "details_scale"
+		const val KEY_PAGE_COUNTER_PLACEMENT = "page_counter_placement"
+		const val KEY_READER_UPSCALE_COMPUTE_MODE = "reader_upscale_compute_mode"
+		const val KEY_EXPLORE_MULTILANG_TIP_DISMISSED = "explore_multilang_tip_dismissed"
 
 		/**
 		 * Keys that must never leave the device: credentials, app-lock state and per-install ids.
@@ -1714,6 +1777,8 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 			KEY_AI_OLLAMA_BASE_URL,
 			KEY_AI_OLLAMA_MODEL_ID,
 			KEY_AI_OLLAMA_CACHED_MODELS,
+			KEY_AI_COMPUTE_DELEGATE,
+			KEY_READER_UPSCALE_COMPUTE_MODE,
 		)
 
 		fun isSyncableKey(key: String): Boolean = key !in SENSITIVE_BACKUP_KEYS &&

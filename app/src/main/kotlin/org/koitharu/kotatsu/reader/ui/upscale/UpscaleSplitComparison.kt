@@ -58,7 +58,9 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.os.HardwareAcceleratorProbe
 import org.koitharu.kotatsu.core.prefs.ReaderUpscalePreset
+import org.koitharu.kotatsu.core.prefs.UpscaleComputeMode
 import org.koitharu.kotatsu.reader.domain.ReaderBitmapUpscaler
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -121,11 +123,91 @@ fun UpscalePresetGridSelector(
 }
 
 @Composable
+fun UpscaleComputeModeSelector(
+	selectedMode: UpscaleComputeMode,
+	onSelectMode: (UpscaleComputeMode) -> Unit,
+	modifier: Modifier = Modifier,
+) {
+	val resolvedBackend = remember(selectedMode) {
+		HardwareAcceleratorProbe.resolveUpscaleBackend(selectedMode)
+	}
+	Column(
+		modifier = modifier.fillMaxWidth(),
+		verticalArrangement = Arrangement.spacedBy(6.dp),
+	) {
+		Row(
+			modifier = Modifier.fillMaxWidth(),
+			verticalAlignment = Alignment.CenterVertically,
+			horizontalArrangement = Arrangement.SpaceBetween,
+		) {
+			Text(
+				text = stringResource(R.string.upscale_compute_title),
+				style = MaterialTheme.typography.labelMedium,
+				fontWeight = FontWeight.SemiBold,
+				color = Color(0xFF94A3B8),
+			)
+			Surface(
+				shape = RoundedCornerShape(50),
+				color = NemuriCyan.copy(alpha = 0.14f),
+				border = BorderStroke(1.dp, NemuriCyan.copy(alpha = 0.40f)),
+			) {
+				Text(
+					text = "Active: ${resolvedBackend.badgeLabel}",
+					style = MaterialTheme.typography.labelSmall,
+					fontSize = 10.sp,
+					fontWeight = FontWeight.Bold,
+					color = NemuriCyan,
+					modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+				)
+			}
+		}
+		Row(
+			modifier = Modifier.fillMaxWidth(),
+			horizontalArrangement = Arrangement.spacedBy(8.dp),
+		) {
+			UpscaleComputeMode.entries.forEach { mode ->
+				val selected = mode == selectedMode
+				val shortLabelRes = when (mode) {
+					UpscaleComputeMode.AUTO -> R.string.upscale_compute_auto_short
+					UpscaleComputeMode.GPU -> R.string.upscale_compute_gpu_short
+					UpscaleComputeMode.CPU -> R.string.upscale_compute_cpu_short
+				}
+				Surface(
+					shape = RoundedCornerShape(10.dp),
+					color = if (selected) NemuriCyan.copy(alpha = 0.18f) else Color(0xFF0D1118),
+					border = BorderStroke(
+						width = 1.dp,
+						color = if (selected) NemuriCyan else Color.White.copy(alpha = 0.09f),
+					),
+					modifier = Modifier
+						.weight(1f)
+						.clip(RoundedCornerShape(10.dp))
+						.clickable { onSelectMode(mode) },
+				) {
+					Text(
+						text = stringResource(shortLabelRes),
+						style = MaterialTheme.typography.labelSmall,
+						fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+						fontSize = 11.sp,
+						color = if (selected) NemuriCyan else Color(0xFFD5DAE5),
+						textAlign = TextAlign.Center,
+						maxLines = 1,
+						overflow = TextOverflow.Ellipsis,
+						modifier = Modifier.padding(horizontal = 6.dp, vertical = 9.dp),
+					)
+				}
+			}
+		}
+	}
+}
+
+@Composable
 fun UpscaleSplitComparisonFrame(
 	sourceBitmap: Bitmap?,
 	selectedPreset: ReaderUpscalePreset,
 	fallbackPreviewPreset: ReaderUpscalePreset,
 	isLoading: Boolean,
+	computeMode: UpscaleComputeMode = UpscaleComputeMode.AUTO,
 	errorMessage: String? = null,
 	aspectRatio: Float = 0.80f,
 	modifier: Modifier = Modifier,
@@ -133,6 +215,9 @@ fun UpscaleSplitComparisonFrame(
 	var splitRatio by remember { mutableFloatStateOf(0.5f) }
 	var frameWidthPx by remember { mutableFloatStateOf(1f) }
 	val density = LocalDensity.current
+	val activeBackend = remember(computeMode) {
+		HardwareAcceleratorProbe.resolveUpscaleBackend(computeMode)
+	}
 
 	val effectiveRightPreset = if (selectedPreset == ReaderUpscalePreset.OFF) {
 		if (fallbackPreviewPreset == ReaderUpscalePreset.OFF) {
@@ -147,7 +232,7 @@ fun UpscaleSplitComparisonFrame(
 	val processedPair by produceState<Pair<Bitmap, Bitmap>?>(
 		initialValue = null,
 		key1 = sourceBitmap,
-		key2 = effectiveRightPreset,
+		key2 = effectiveRightPreset to computeMode,
 		key3 = isLoading,
 	) {
 		if (isLoading && sourceBitmap == null) {
@@ -156,7 +241,7 @@ fun UpscaleSplitComparisonFrame(
 		}
 		value = withContext(Dispatchers.Default) {
 			val raw = sourceBitmap ?: createProceduralMangaSampleBitmap()
-			ReaderBitmapUpscaler.processForPreview(raw, effectiveRightPreset)
+			ReaderBitmapUpscaler.processForPreview(raw, effectiveRightPreset, computeMode)
 		}
 	}
 
@@ -299,7 +384,7 @@ fun UpscaleSplitComparisonFrame(
 				)
 			}
 
-			// Top-right Active Preset badge
+			// Top-right Active Preset + Compute Delegate badge
 			Surface(
 				color = NemuriObsidianCard.copy(alpha = 0.88f),
 				shape = RoundedCornerShape(8.dp),
@@ -309,7 +394,7 @@ fun UpscaleSplitComparisonFrame(
 					.padding(10.dp),
 			) {
 				Text(
-					text = stringResource(effectiveRightPreset.shortLabelResId),
+					text = "${stringResource(effectiveRightPreset.shortLabelResId)} • ${activeBackend.badgeLabel}",
 					style = MaterialTheme.typography.labelSmall,
 					fontWeight = FontWeight.Bold,
 					color = NemuriCyan,

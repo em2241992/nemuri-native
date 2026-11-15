@@ -6,7 +6,10 @@ import android.view.MenuItem
 import androidx.core.view.MenuProvider
 import org.koitharu.kotatsu.R
 
-class MainMenuProvider(private val viewModel: MainViewModel) : MenuProvider {
+class MainMenuProvider(
+	private val viewModel: MainViewModel,
+	private val onOpenSettings: () -> Unit,
+) : MenuProvider {
 
 	override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
 		menuInflater.inflate(R.menu.opt_main, menu)
@@ -20,6 +23,10 @@ class MainMenuProvider(private val viewModel: MainViewModel) : MenuProvider {
 	override fun onMenuItemSelected(menuItem: MenuItem): Boolean = when (menuItem.itemId) {
 		R.id.action_incognito -> {
 			viewModel.setIncognitoMode(!menuItem.isChecked)
+			true
+		}
+		R.id.action_settings -> {
+			onOpenSettings()
 			true
 		}
 		else -> false

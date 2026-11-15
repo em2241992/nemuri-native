@@ -20,7 +20,10 @@ import kotlinx.coroutines.launch
 import org.koitharu.kotatsu.BuildConfig
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.exceptions.resolve.ExceptionResolver
+import org.koitharu.kotatsu.core.os.HardwareAcceleratorProbe
 import org.koitharu.kotatsu.core.os.NetworkState
+import org.koitharu.kotatsu.core.os.ResolvedUpscaleBackend
+import org.koitharu.kotatsu.core.prefs.ReaderUpscalePreset
 import org.koitharu.kotatsu.core.ui.list.lifecycle.LifecycleAwareViewHolder
 import org.koitharu.kotatsu.core.util.ext.getDisplayMessage
 import org.koitharu.kotatsu.core.util.ext.isLowRamDevice
@@ -64,6 +67,8 @@ abstract class BasePageHolder<B : ViewBinding>(
 		private set
 
 	private var isProgressPending = false
+	private var lastAppliedBackend: ResolvedUpscaleBackend? = null
+	private var lastAppliedCpuPreset: ReaderUpscalePreset? = null
 
 	init {
 		lifecycleScope.launch(Dispatchers.Main) {
@@ -89,6 +94,28 @@ abstract class BasePageHolder<B : ViewBinding>(
 	@CallSuper
 	protected open fun onConfigChanged(settings: ReaderSettings) {
 		settings.applyBackground(itemView)
+		val resolvedBackend = HardwareAcceleratorProbe.resolveUpscaleBackend(settings.upscaleComputeMode)
+		val effectiveCpuPreset = if (resolvedBackend == ResolvedUpscaleBackend.CPU_MULTICORE && settings.isUpscaleEnabled) {
+			settings.upscalePreset.takeIf { it != ReaderUpscalePreset.OFF }
+		} else {
+			null
+		}
+		val cpuPipelineChanged = lastAppliedBackend != null && (
+			lastAppliedBackend != resolvedBackend ||
+				(resolvedBackend == ResolvedUpscaleBackend.CPU_MULTICORE && lastAppliedCpuPreset != effectiveCpuPreset)
+			)
+		lastAppliedBackend = resolvedBackend
+		lastAppliedCpuPreset = effectiveCpuPreset
+
+		if (cpuPipelineChanged) {
+			val page = boundData?.toMangaPage()
+			if (page != null) {
+				clearUpscale()
+				viewModel.reloadFromCacheForUpscaleChange(page)
+				return
+			}
+		}
+
 		if (settings.applyBitmapConfig(ssiv)) {
 			reloadImage()
 		} else if (viewModel.state.value is PageState.Shown) {
@@ -107,6 +134,13 @@ abstract class BasePageHolder<B : ViewBinding>(
 	fun bind(data: ReaderPage) {
 		if (boundData?.id != data.id) {
 			clearUpscale()
+		}
+		val resolved = HardwareAcceleratorProbe.resolveUpscaleBackend(settings.upscaleComputeMode)
+		lastAppliedBackend = resolved
+		lastAppliedCpuPreset = if (resolved == ResolvedUpscaleBackend.CPU_MULTICORE && settings.isUpscaleEnabled) {
+			settings.upscalePreset.takeIf { it != ReaderUpscalePreset.OFF }
+		} else {
+			null
 		}
 		boundData = data
 		viewModel.onBind(data.toMangaPage())
@@ -243,6 +277,11 @@ abstract class BasePageHolder<B : ViewBinding>(
 
 	private fun applyUpscale() {
 		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+			return
+		}
+		val resolvedBackend = HardwareAcceleratorProbe.resolveUpscaleBackend(settings.upscaleComputeMode)
+		if (resolvedBackend != ResolvedUpscaleBackend.GPU_AGSL) {
+			clearUpscale()
 			return
 		}
 		// gate on the page's native resolution vs screen, not the current zoom level,

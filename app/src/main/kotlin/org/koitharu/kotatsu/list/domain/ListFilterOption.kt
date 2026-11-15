@@ -30,13 +30,28 @@ sealed interface ListFilterOption {
 
 	fun getIconData(): Any? = null
 
+	data object All : ListFilterOption {
+
+		override val titleResId: Int
+			get() = R.string.filter_all_series
+
+		override val iconResId: Int
+			get() = R.drawable.ic_status_dot
+
+		override val titleText: CharSequence?
+			get() = null
+
+		override val groupKey: String
+			get() = "_all"
+	}
+
 	data object Downloaded : ListFilterOption {
 
 		override val titleResId: Int
-			get() = R.string.on_device
+			get() = R.string.filter_downloaded
 
 		override val iconResId: Int
-			get() = R.drawable.ic_storage
+			get() = R.drawable.ic_status_dot
 
 		override val titleText: CharSequence?
 			get() = null
@@ -50,8 +65,10 @@ sealed interface ListFilterOption {
 		@DrawableRes override val iconResId: Int,
 	) : ListFilterOption {
 
-		COMPLETED(R.string.status_completed, R.drawable.ic_state_finished),
-		NEW_CHAPTERS(R.string.new_chapters, R.drawable.ic_updated),
+		UNREAD(R.string.filter_unread, R.drawable.ic_status_dot),
+		COMPLETED(R.string.status_completed, R.drawable.ic_status_dot),
+		DUPLICATES(R.string.filter_duplicates, R.drawable.ic_status_dot),
+		NEW_CHAPTERS(R.string.new_chapters, R.drawable.ic_status_dot),
 		FAVORITE(R.string.favourites, R.drawable.ic_heart_outline),
 		NSFW(R.string.nsfw, R.drawable.ic_nsfw),
 		;

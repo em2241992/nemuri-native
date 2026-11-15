@@ -88,6 +88,7 @@ import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.core.prefs.DedupeWinnerRule
 import org.koitharu.kotatsu.core.prefs.ReaderUpscalePreset
+import org.koitharu.kotatsu.core.prefs.UpscaleComputeMode
 import org.koitharu.kotatsu.core.ui.dialog.buildAlertDialog
 import org.koitharu.kotatsu.core.util.ext.mangaSourceExtra
 import org.koitharu.kotatsu.enhance.domain.DuplicatePairItem
@@ -97,6 +98,7 @@ import org.koitharu.kotatsu.enhance.domain.RepairIssueKind
 import org.koitharu.kotatsu.enhance.domain.RepairItem
 import org.koitharu.kotatsu.list.domain.ReadingProgress
 import org.koitharu.kotatsu.parsers.model.Manga
+import org.koitharu.kotatsu.reader.ui.upscale.UpscaleComputeModeSelector
 import org.koitharu.kotatsu.reader.ui.upscale.UpscalePresetGridSelector
 import org.koitharu.kotatsu.reader.ui.upscale.UpscaleSplitComparisonFrame
 import org.koitharu.kotatsu.settings.SettingsActivity
@@ -315,6 +317,7 @@ private fun EnhanceHubScreen(
 					nestedScroll = nestedScroll,
 					bottomPadding = bottomInset + 96.dp,
 					onSelectPreset = viewModel::selectUpscalePreset,
+					onSelectComputeMode = viewModel::selectUpscaleComputeMode,
 					onToggleActive = viewModel::setUpscaleActive,
 					onToggle32Bit = viewModel::set32BitColor,
 					onSelectSample = viewModel::selectUpscaleSample,
@@ -1372,6 +1375,7 @@ private fun UpscalerTabContent(
 	nestedScroll: androidx.compose.ui.input.nestedscroll.NestedScrollConnection,
 	bottomPadding: androidx.compose.ui.unit.Dp,
 	onSelectPreset: (ReaderUpscalePreset) -> Unit,
+	onSelectComputeMode: (UpscaleComputeMode) -> Unit,
 	onToggleActive: (Boolean) -> Unit,
 	onToggle32Bit: (Boolean) -> Unit,
 	onSelectSample: (org.koitharu.kotatsu.enhance.domain.UpscaleSampleItem) -> Unit,
@@ -1447,6 +1451,7 @@ private fun UpscalerTabContent(
 						sourceBitmap = state.sampleBitmap,
 						selectedPreset = state.upscalePreset,
 						fallbackPreviewPreset = state.previewUpscalePreset,
+						computeMode = state.upscaleComputeMode,
 						isLoading = state.isLoadingSampleBitmap,
 						aspectRatio = 0.82f,
 					)
@@ -1501,6 +1506,12 @@ private fun UpscalerTabContent(
 					UpscalePresetGridSelector(
 						selectedPreset = state.upscalePreset,
 						onSelectPreset = onSelectPreset,
+					)
+
+					// Hardware Compute Delegate Selector (Auto / GPU • AGSL / CPU • Multi-Core)
+					UpscaleComputeModeSelector(
+						selectedMode = state.upscaleComputeMode,
+						onSelectMode = onSelectComputeMode,
 					)
 
 					Text(

@@ -147,7 +147,7 @@ abstract class MangaListFragment :
 		}
 
 		viewModel.listMode.observe(viewLifecycleOwner, ::onListModeChanged)
-		viewModel.gridScale.observe(viewLifecycleOwner, ::onGridScaleChanged)
+		viewModel.gridColumnCount.observe(viewLifecycleOwner, ::onGridColumnCountChanged)
 		viewModel.isLoading.observe(viewLifecycleOwner, ::onLoadingStateChanged)
 		viewModel.content.observe(viewLifecycleOwner, ::onListChanged)
 		viewModel.onError.observeEvent(viewLifecycleOwner, SnackbarErrorObserver(binding.recyclerView, this))
@@ -305,9 +305,9 @@ abstract class MangaListFragment :
 		resolveException(error)
 	}
 
-	private fun onGridScaleChanged(scale: Float) {
+	private fun onGridColumnCountChanged(columns: Int) {
 		spanSizeLookup.invalidateCache()
-		spanResolver?.setGridSize(scale, requireViewBinding().recyclerView)
+		spanResolver?.setFixedSpanCount(columns, requireViewBinding().recyclerView)
 	}
 
 	private fun onListModeChanged(mode: ListMode) {
@@ -336,10 +336,12 @@ abstract class MangaListFragment :
 				}
 
 				ListMode.COVER_ONLY, ListMode.GRID -> {
-					layoutManager = FitHeightGridLayoutManager(context, checkNotNull(spanResolver).spanCount).also {
+					val resolver = checkNotNull(spanResolver)
+					layoutManager = FitHeightGridLayoutManager(context, viewModel.gridColumnCount.value).also {
 						it.spanSizeLookup = spanSizeLookup
 					}
-					addOnLayoutChangeListener(spanResolver)
+					resolver.setFixedSpanCount(viewModel.gridColumnCount.value, this)
+					addOnLayoutChangeListener(resolver)
 				}
 			}
 		}

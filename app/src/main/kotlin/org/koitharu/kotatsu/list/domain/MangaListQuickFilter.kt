@@ -37,6 +37,10 @@ abstract class MangaListQuickFilter(
 	}
 
 	override fun toggleFilterOption(option: ListFilterOption) {
+		if (option is ListFilterOption.All) {
+			clearFilter()
+			return
+		}
 		if (option is ListFilterOption.State) {
 			cycleStateFilter()
 			return
