@@ -233,6 +233,24 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		get() = prefs.getBoolean(KEY_MIGRATE_DUPLICATE_PROGRESS, true)
 		set(value) = prefs.edit { putBoolean(KEY_MIGRATE_DUPLICATE_PROGRESS, value) }
 
+	var dedupeWinnerRule: DedupeWinnerRule
+		get() = prefs.getEnumValue(KEY_ENHANCE_DEDUPE_WINNER_RULE, DedupeWinnerRule.MOST_CHAPTERS)
+		set(value) = prefs.edit { putEnumValue(KEY_ENHANCE_DEDUPE_WINNER_RULE, value) }
+
+	var ignoredDuplicatePairs: Set<String>
+		get() = prefs.getStringSet(KEY_ENHANCE_IGNORED_DUPLICATE_PAIRS, null)?.toSet().orEmpty()
+		set(value) = prefs.edit { putStringSet(KEY_ENHANCE_IGNORED_DUPLICATE_PAIRS, value.toSet()) }
+
+	var enhanceSourcePriorityOrder: List<String>
+		get() = prefs.getString(KEY_ENHANCE_SOURCE_PRIORITY_ORDER, null)
+			?.split('\n')
+			?.map { it.trim() }
+			?.filter { it.isNotEmpty() }
+			.orEmpty()
+		set(value) = prefs.edit {
+			putString(KEY_ENHANCE_SOURCE_PRIORITY_ORDER, value.distinct().joinToString("\n"))
+		}
+
 	var isGridSpacingIncreased: Boolean
 		get() = prefs.getBoolean(KEY_GRID_SPACING_INCREASED, false)
 		set(value) = prefs.edit { putBoolean(KEY_GRID_SPACING_INCREASED, value) }
@@ -440,8 +458,38 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 	val isReaderOptimizationEnabled: Boolean
 		get() = prefs.getBoolean(KEY_READER_OPTIMIZE, false)
 
-	val isReaderUpscaleEnabled: Boolean
+	var isReaderUpscaleEnabled: Boolean
 		get() = prefs.getBoolean(KEY_READER_UPSCALE, false)
+		set(value) = prefs.edit {
+			putBoolean(KEY_READER_UPSCALE, value)
+			if (value) {
+				val current = prefs.getEnumValue(KEY_READER_UPSCALE_PRESET, ReaderUpscalePreset.OFF)
+				if (current == ReaderUpscalePreset.OFF) {
+					putEnumValue(KEY_READER_UPSCALE_PRESET, ReaderUpscalePreset.FAST_NPU_1_5X)
+				}
+			}
+		}
+
+	var readerUpscalePreset: ReaderUpscalePreset
+		get() {
+			if (!isReaderUpscaleEnabled) return ReaderUpscalePreset.OFF
+			val stored = prefs.getEnumValue(KEY_READER_UPSCALE_PRESET, ReaderUpscalePreset.FAST_NPU_1_5X)
+			return if (stored == ReaderUpscalePreset.OFF) ReaderUpscalePreset.FAST_NPU_1_5X else stored
+		}
+		set(value) = prefs.edit {
+			if (value == ReaderUpscalePreset.OFF) {
+				putBoolean(KEY_READER_UPSCALE, false)
+			} else {
+				putEnumValue(KEY_READER_UPSCALE_PRESET, value)
+				putBoolean(KEY_READER_UPSCALE, true)
+			}
+		}
+
+	val previewUpscalePreset: ReaderUpscalePreset
+		get() {
+			val stored = prefs.getEnumValue(KEY_READER_UPSCALE_PRESET, ReaderUpscalePreset.FAST_NPU_1_5X)
+			return if (stored == ReaderUpscalePreset.OFF) ReaderUpscalePreset.FAST_NPU_1_5X else stored
+		}
 
 	var isChapterJumpDialogEnabled: Boolean
 		get() = prefs.getBoolean(KEY_CHAPTER_JUMP_DIALOG, true)
@@ -464,9 +512,9 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 				?.distinctBy { it.first }
 				.orEmpty()
 			val base = stored.ifEmpty { legacyReaderControlsLayout() }
-			// Controls introduced by a later version are appended, hidden.
+			// Controls introduced by a later version are appended; UPSCALE defaults to shown once in the bottom bar.
 			val known = base.mapToSet { it.first }
-			return base + ReaderControl.entries.filterNot { it in known }.map { it to false }
+			return base + ReaderControl.entries.filterNot { it in known }.map { it to (it == ReaderControl.UPSCALE) }
 		}
 		set(value) = prefs.edit {
 			putString(KEY_READER_CONTROLS, value.joinToString(",") { (c, isShown) -> if (isShown) c.name else "-${c.name}" })
@@ -1126,8 +1174,9 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 	val isPagesPreloadEnabled: Boolean
 		get() = !isBackgroundNetworkRestricted()
 
-	val is32BitColorsEnabled: Boolean
+	var is32BitColorsEnabled: Boolean
 		get() = prefs.getBoolean(KEY_32BIT_COLOR, false)
+		set(value) = prefs.edit { putBoolean(KEY_32BIT_COLOR, value) }
 
 	val isDiscordRpcEnabled: Boolean
 		get() = prefs.getBoolean(KEY_DISCORD_RPC, false)
@@ -1441,6 +1490,10 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		const val KEY_SHORTCUTS = "dynamic_shortcuts"
 		const val KEY_READER_OPTIMIZE = "reader_optimize"
 		const val KEY_READER_UPSCALE = "reader_upscale"
+		const val KEY_READER_UPSCALE_PRESET = "reader_upscale_preset"
+		const val KEY_ENHANCE_DEDUPE_WINNER_RULE = "enhance_dedupe_winner_rule"
+		const val KEY_ENHANCE_IGNORED_DUPLICATE_PAIRS = "enhance_ignored_duplicate_pairs"
+		const val KEY_ENHANCE_SOURCE_PRIORITY_ORDER = "enhance_source_priority_order"
 		const val KEY_LOCAL_LIST_ORDER = "local_order"
 		const val KEY_HISTORY_ORDER = "history_order"
 		const val KEY_FAVORITES_ORDER = "fav_order"

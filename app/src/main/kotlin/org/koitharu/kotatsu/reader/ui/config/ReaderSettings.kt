@@ -23,6 +23,7 @@ import org.koitharu.kotatsu.core.parser.MangaDataRepository
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.ReaderBackground
 import org.koitharu.kotatsu.core.prefs.ReaderMode
+import org.koitharu.kotatsu.core.prefs.ReaderUpscalePreset
 import org.koitharu.kotatsu.core.util.MediatorStateFlow
 import org.koitharu.kotatsu.core.util.ext.isLowRamDevice
 import org.koitharu.kotatsu.core.util.ext.processLifecycleScope
@@ -34,6 +35,7 @@ data class ReaderSettings(
 	val colorFilter: ReaderColorFilter?,
 	val isReaderOptimizationEnabled: Boolean,
 	val isUpscaleEnabled: Boolean,
+	val upscalePreset: ReaderUpscalePreset,
 	val bitmapConfig: Bitmap.Config,
 	val isPagesNumbersEnabled: Boolean,
 	val isPagesCropEnabledStandard: Boolean,
@@ -46,6 +48,7 @@ data class ReaderSettings(
 		colorFilter = colorFilterOverride?.takeUnless { it.isEmpty } ?: settings.readerColorFilter,
 		isReaderOptimizationEnabled = settings.isReaderOptimizationEnabled,
 		isUpscaleEnabled = settings.isReaderUpscaleEnabled,
+		upscalePreset = settings.readerUpscalePreset,
 		bitmapConfig = if (settings.is32BitColorsEnabled) {
 			Bitmap.Config.ARGB_8888
 		} else {
@@ -103,6 +106,7 @@ data class ReaderSettings(
 			AppSettings.KEY_32BIT_COLOR,
 			AppSettings.KEY_READER_OPTIMIZE,
 			AppSettings.KEY_READER_UPSCALE,
+			AppSettings.KEY_READER_UPSCALE_PRESET,
 			AppSettings.KEY_CF_CONTRAST,
 			AppSettings.KEY_CF_BRIGHTNESS,
 			AppSettings.KEY_CF_INVERTED,

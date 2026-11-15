@@ -63,6 +63,7 @@ class DuplicatesSheet : BaseAdaptiveSheet<SheetDuplicatesBinding>() {
 						// Preview opens the real details screen; the sheet survives behind it and is
 						// still waiting on this same card when the user comes back.
 						onPreview = { router.openDetails(it.manga) },
+						onMerge = { viewModel.mergeWith(it.manga) },
 						onReplace = { viewModel.replaceWith(it.manga) },
 						onDisableCheck = viewModel::disableDuplicateCheck,
 						onMigrateProgressChanged = viewModel::setProgressMigrated,
@@ -75,6 +76,7 @@ class DuplicatesSheet : BaseAdaptiveSheet<SheetDuplicatesBinding>() {
 		viewModel.state.observe(viewLifecycleOwner, ::onStateChanged)
 		viewModel.onFinished.observeEvent(viewLifecycleOwner, ::onFinished)
 		viewModel.onMigrated.observeEvent(viewLifecycleOwner, ::onMigrated)
+		viewModel.onMerged.observeEvent(viewLifecycleOwner, ::onMerged)
 		viewModel.onError.observeEvent(viewLifecycleOwner) { e ->
 			Toast.makeText(binding.root.context, e.getDisplayMessage(resources), Toast.LENGTH_LONG).show()
 		}
@@ -146,6 +148,15 @@ class DuplicatesSheet : BaseAdaptiveSheet<SheetDuplicatesBinding>() {
 				result.toSource.getTitle(context),
 			),
 			Toast.LENGTH_LONG,
+		).show()
+	}
+
+	private fun onMerged(result: MigrationResult) {
+		val context = context ?: return
+		Toast.makeText(
+			context,
+			getString(R.string.duplicates_merged_toast, result.fromSource.getTitle(context)),
+			Toast.LENGTH_SHORT,
 		).show()
 	}
 

@@ -313,14 +313,10 @@ class ReaderActivity :
             ReaderMenuProvider(
                 onOpenMenu = ::openMenu,
                 onSearchBook = ::openEpubSearch,
-                onShowUpscalePreview = ::showUpscalePreview,
                 isEpub = { readerManager.isEpub },
-                isUpscaleActive = { UpscaleEffect.activePages.value.isNotEmpty() },
                 isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE,
             ),
         )
-        UpscaleEffect.activePages.map { it.isNotEmpty() }.distinctUntilChanged()
-            .observe(this, MenuInvalidator(this))
         // Long-pressing the top bar offers the chapter currently being read in the built-in
         // browser — the same action the chapters list already offers on a selected chapter.
         viewBinding.toolbar.setOnLongClickListener(::onToolbarLongClick)
@@ -882,10 +878,12 @@ class ReaderActivity :
 		(readerManager.currentReader as? EpubReaderFragment)?.showBookSearch()
 	}
 
+	override fun onUpscaleClick() {
+		showUpscalePreview()
+	}
+
 	private fun showUpscalePreview() {
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-			UpscalePreviewDialog.show(supportFragmentManager)
-		}
+		UpscalePreviewDialog.show(supportFragmentManager)
 	}
 
     override fun toggleScreenOrientation() {

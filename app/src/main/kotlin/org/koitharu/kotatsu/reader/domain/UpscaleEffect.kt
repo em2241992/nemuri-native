@@ -1,5 +1,6 @@
 package org.koitharu.kotatsu.reader.domain
 
+import android.graphics.ColorMatrixColorFilter
 import android.graphics.Rect
 import android.graphics.RenderEffect
 import android.graphics.RuntimeShader
@@ -8,22 +9,23 @@ import androidx.annotation.RequiresApi
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
+import org.koitharu.kotatsu.core.prefs.ReaderUpscalePreset
 import org.koitharu.kotatsu.core.util.ext.printStackTraceDebug
 import java.lang.ref.WeakReference
 
 /**
- * Anime4K v0.9 (gradient push) ported to AGSL, applied as a screen-space RenderEffect.
- * Refines line art on pages that are rendered above their native resolution.
+ * Multi-preset GPU RenderEffect pipeline (Anime4K AGSL gradient push + Ink Restore + Bedtime Warm Contrast).
+ * Applied in screen-space on API 33+, with CPU/Canvas fallback in [ReaderBitmapUpscaler] on older APIs.
  */
 object UpscaleEffect {
 
-	// only pages whose native size is well below the screen are considered low-res
-	const val MIN_SCALE = 1.5f
+	// Pages whose native resolution is below screen width get GPU line-art sharpening
+	const val MIN_SCALE = 1.35f
 
 	val isSupported: Boolean
 		get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
 
-	/** Page ids currently rendered with the effect, used to toggle the toolbar icon */
+	/** Page ids currently rendered with the effect, used to track active status */
 	val activePages = MutableStateFlow<Set<Long>>(emptySet())
 
 	fun setActive(pageId: Long, isActive: Boolean) {
@@ -65,26 +67,67 @@ object UpscaleEffect {
 	}
 
 	@RequiresApi(Build.VERSION_CODES.TIRAMISU)
-	fun create(scale: Float): RenderEffect? = runCatching {
-		// Anime4K is iterative: chain more push passes the more the page is stretched
-		val passes = when {
-			scale >= 3f -> 4
-			scale >= 2f -> 3
-			else -> 2
+	fun create(
+		scale: Float,
+		preset: ReaderUpscalePreset = ReaderUpscalePreset.FAST_NPU_1_5X,
+	): RenderEffect? = runCatching {
+		when (preset) {
+			ReaderUpscalePreset.OFF -> null
+
+			ReaderUpscalePreset.BEDTIME_WARM_CONTRAST -> {
+				RenderEffect.createColorFilterEffect(
+					ColorMatrixColorFilter(ReaderBitmapUpscaler.warmContrastColorMatrix()),
+				)
+			}
+
+			ReaderUpscalePreset.FAST_NPU_1_5X -> {
+				if (scale <= MIN_SCALE) return@runCatching null
+				val passes = if (scale >= 2.4f) 3 else 2
+				buildAnime4kChain(scale = scale, passes = passes, strength = 0.65f)
+			}
+
+			ReaderUpscalePreset.HQ_LINE_ART_2X -> {
+				val contrastPass = RenderEffect.createColorFilterEffect(
+					ColorMatrixColorFilter(ReaderBitmapUpscaler.hqInkContrastColorMatrix()),
+				)
+				if (scale <= 1.1f) {
+					contrastPass
+				} else {
+					val passes = when {
+						scale >= 3f -> 4
+						scale >= 2f -> 3
+						else -> 2
+					}
+					val anime4k = buildAnime4kChain(scale = scale, passes = passes, strength = 0.85f)
+					if (anime4k != null) {
+						RenderEffect.createChainEffect(contrastPass, anime4k)
+					} else {
+						contrastPass
+					}
+				}
+			}
 		}
+	}.onFailure {
+		it.printStackTraceDebug()
+	}.getOrNull()
+
+	@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+	private fun buildAnime4kChain(
+		scale: Float,
+		passes: Int,
+		strength: Float,
+	): RenderEffect? {
 		val px = (scale / 2f).coerceIn(1f, 2.5f)
 		var effect: RenderEffect? = null
 		repeat(passes) {
 			val shader = RuntimeShader(AGSL)
-			shader.setFloatUniform("strength", 0.75f)
+			shader.setFloatUniform("strength", strength)
 			shader.setFloatUniform("px", px)
 			val pass = RenderEffect.createRuntimeShaderEffect(shader, "src")
 			effect = effect?.let { RenderEffect.createChainEffect(pass, it) } ?: pass
 		}
-		effect
-	}.onFailure {
-		it.printStackTraceDebug()
-	}.getOrNull()
+		return effect
+	}
 
 	private val AGSL = """
 		uniform shader src;

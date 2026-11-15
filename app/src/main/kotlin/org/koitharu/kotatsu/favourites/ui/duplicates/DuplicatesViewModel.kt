@@ -15,6 +15,7 @@ import org.koitharu.kotatsu.core.ui.BaseViewModel
 import org.koitharu.kotatsu.core.util.ext.MutableEventFlow
 import org.koitharu.kotatsu.core.util.ext.call
 import org.koitharu.kotatsu.core.util.ext.require
+import org.koitharu.kotatsu.details.data.MergeSourcesRepository
 import org.koitharu.kotatsu.favourites.domain.DuplicatesUseCase
 import org.koitharu.kotatsu.favourites.domain.FavouritesRepository
 import org.koitharu.kotatsu.favourites.domain.MangaDuplicate
@@ -34,6 +35,7 @@ class DuplicatesViewModel @Inject constructor(
 	savedStateHandle: SavedStateHandle,
 	private val duplicatesUseCase: DuplicatesUseCase,
 	private val migrateUseCase: MigrateUseCase,
+	private val mergeSourcesRepository: MergeSourcesRepository,
 	private val favouritesRepository: FavouritesRepository,
 	private val settings: AppSettings,
 ) : BaseViewModel() {
@@ -51,6 +53,7 @@ class DuplicatesViewModel @Inject constructor(
 
 	val onFinished = MutableEventFlow<List<Manga>>()
 	val onMigrated = MutableEventFlow<MigrationResult>()
+	val onMerged = MutableEventFlow<MigrationResult>()
 
 	init {
 		launchJob(Dispatchers.Default) {
@@ -131,6 +134,32 @@ class DuplicatesViewModel @Inject constructor(
 					title = current.manga.title,
 					fromSource = existing.source,
 					toSource = current.manga.source,
+				),
+			)
+			queue.removeFirstOrNull()
+			advance()
+		}
+	}
+
+	fun mergeWith(existing: Manga) {
+		if (isBusy()) return
+		val current = queue.firstOrNull() ?: return
+		setCardsBusy(existing.id)
+		launchLoadingJob(Dispatchers.Default) {
+			try {
+				mergeSourcesRepository.linkSource(
+					primaryManga = existing,
+					secondaryManga = current.manga,
+				)
+			} catch (e: Throwable) {
+				setCardsBusy(null)
+				throw e
+			}
+			onMerged.call(
+				MigrationResult(
+					title = existing.title,
+					fromSource = current.manga.source,
+					toSource = existing.source,
 				),
 			)
 			queue.removeFirstOrNull()

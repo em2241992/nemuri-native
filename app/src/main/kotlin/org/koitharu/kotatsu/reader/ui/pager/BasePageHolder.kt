@@ -253,8 +253,9 @@ abstract class BasePageHolder<B : ViewBinding>(
 			0f
 		}
 		val isPowerSaveMode = context.getSystemService(PowerManager::class.java)?.isPowerSaveMode == true
-		val effect = if (settings.isUpscaleEnabled && !isPowerSaveMode && fitScale > UpscaleEffect.MIN_SCALE) {
-			UpscaleEffect.create(fitScale)
+		val preset = settings.upscalePreset
+		val effect = if (settings.isUpscaleEnabled && preset.scaleFactor >= 1f && !isPowerSaveMode && fitScale > 0f) {
+			UpscaleEffect.create(fitScale, preset)
 		} else {
 			null
 		}

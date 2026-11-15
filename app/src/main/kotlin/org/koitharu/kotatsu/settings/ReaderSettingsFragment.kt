@@ -27,6 +27,7 @@ import org.koitharu.kotatsu.core.prefs.ReaderAnimation
 import org.koitharu.kotatsu.core.prefs.ReaderBackground
 import org.koitharu.kotatsu.core.prefs.ReaderMode
 import org.koitharu.kotatsu.core.prefs.ReaderScrubberPosition
+import org.koitharu.kotatsu.core.prefs.ReaderUpscalePreset
 import org.koitharu.kotatsu.core.ui.util.ActivityRecreationHandle
 import javax.inject.Inject
 import kotlin.math.roundToInt
@@ -128,6 +129,17 @@ private fun ReaderScreen(
 	var enhancedColors by rememberBooleanPref(AppSettings.KEY_32BIT_COLOR, false)
 	var readerOptimize by rememberBooleanPref(AppSettings.KEY_READER_OPTIMIZE, false)
 	var readerUpscale by rememberBooleanPref(AppSettings.KEY_READER_UPSCALE, false)
+	var readerUpscalePreset by rememberStringPref(
+		AppSettings.KEY_READER_UPSCALE_PRESET,
+		ReaderUpscalePreset.FAST_NPU_1_5X.name,
+	)
+	val upscalePresetEntries = listOf(
+		stringResource(R.string.upscale_preset_off),
+		stringResource(R.string.upscale_preset_fast_npu),
+		stringResource(R.string.upscale_preset_hq_line_art),
+		stringResource(R.string.upscale_preset_bedtime_warm),
+	)
+	val upscalePresetValues = remember { ReaderUpscalePreset.entries.names().toList() }
 	var readerCrop by rememberStringSetPref(AppSettings.KEY_READER_CROP, emptySet())
 	var readerFullscreen by rememberBooleanPref(AppSettings.KEY_READER_FULLSCREEN, true)
 	var readerOrientation by rememberStringPref(
@@ -422,18 +434,43 @@ private fun ReaderScreen(
 						shape = pos.shape,
 					)
 				}
-				if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-					item { pos ->
-						SwitchSettingsItem(
-							title = stringResource(R.string.reader_upscale),
-							subtitle = stringResource(R.string.reader_upscale_summary),
-							checked = readerUpscale,
-							onCheckedChange = { readerUpscale = it },
-							icon = R.drawable.ic_sparkles,
-
-							shape = pos.shape,
-						)
-					}
+				item { pos ->
+					SwitchSettingsItem(
+						title = stringResource(R.string.reader_upscale),
+						subtitle = stringResource(R.string.reader_upscale_summary),
+						checked = readerUpscale,
+						onCheckedChange = { enabled ->
+							readerUpscale = enabled
+							if (enabled && readerUpscalePreset == ReaderUpscalePreset.OFF.name) {
+								readerUpscalePreset = ReaderUpscalePreset.FAST_NPU_1_5X.name
+							}
+						},
+						icon = R.drawable.ic_sparkles,
+						shape = pos.shape,
+					)
+				}
+				item { pos ->
+					ListSettingsItem(
+						title = stringResource(R.string.upscale_preset_title),
+						entries = upscalePresetEntries,
+						entryValues = upscalePresetValues,
+						selectedValue = if (readerUpscale) {
+							readerUpscalePreset.takeIf { it != ReaderUpscalePreset.OFF.name }
+								?: ReaderUpscalePreset.FAST_NPU_1_5X.name
+						} else {
+							ReaderUpscalePreset.OFF.name
+						},
+						onValueChange = { next ->
+							if (next == ReaderUpscalePreset.OFF.name) {
+								readerUpscale = false
+							} else {
+								readerUpscalePreset = next
+								readerUpscale = true
+							}
+						},
+						icon = R.drawable.ic_tune,
+						shape = pos.shape,
+					)
 				}
 				item { pos ->
 					SwitchSettingsItem(

@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
@@ -68,6 +69,7 @@ fun DuplicatesContent(
 	onSkip: () -> Unit,
 	onAddAnyway: () -> Unit,
 	onPreview: (DuplicateCardModel) -> Unit,
+	onMerge: (DuplicateCardModel) -> Unit,
 	onReplace: (DuplicateCardModel) -> Unit,
 	onDisableCheck: () -> Unit,
 	onMigrateProgressChanged: (Boolean) -> Unit,
@@ -96,6 +98,7 @@ fun DuplicatesContent(
 					card = card,
 					imageLoader = imageLoader,
 					onPreview = onPreview,
+					onMerge = onMerge,
 					onReplace = onReplace,
 				)
 			}
@@ -247,6 +250,7 @@ private fun DuplicateCard(
 	card: DuplicateCardModel,
 	imageLoader: ImageLoader,
 	onPreview: (DuplicateCardModel) -> Unit,
+	onMerge: (DuplicateCardModel) -> Unit,
 	onReplace: (DuplicateCardModel) -> Unit,
 ) {
 	Surface(
@@ -287,9 +291,10 @@ private fun DuplicateCard(
 					CategoryPill(card)
 					Spacer(Modifier.height(12.dp))
 					Row(
-						horizontalArrangement = Arrangement.End,
+						horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
 						modifier = Modifier.fillMaxWidth(),
 					) {
+						MergeButton(card, onMerge)
 						ReplaceButton(card, onReplace)
 					}
 				}
@@ -453,6 +458,45 @@ private fun CategoryPill(card: DuplicateCardModel) {
 				text = categories.joinToString(", "),
 				style = MaterialTheme.typography.labelSmall,
 				color = MaterialTheme.colorScheme.onSecondaryContainer,
+				maxLines = 1,
+				overflow = TextOverflow.Ellipsis,
+			)
+		}
+	}
+}
+
+@Composable
+private fun MergeButton(
+	card: DuplicateCardModel,
+	onMerge: (DuplicateCardModel) -> Unit,
+) {
+	Button(
+		onClick = { onMerge(card) },
+		enabled = card.duplicate.canReplace && !card.isBlocked,
+		shape = RoundedCornerShape(18.dp),
+		colors = ButtonDefaults.buttonColors(
+			containerColor = Color(0xFF5CE1E6),
+			contentColor = Color(0xFF061318),
+		),
+		contentPadding = PaddingValues(horizontal = 14.dp),
+		modifier = Modifier.height(38.dp),
+	) {
+		if (card.isMigrating) {
+			CircularProgressIndicator(
+				strokeWidth = 2.dp,
+				color = Color(0xFF061318),
+				modifier = Modifier.size(18.dp),
+			)
+		} else {
+			Icon(
+				painter = painterResource(R.drawable.ic_merge),
+				contentDescription = null,
+				modifier = Modifier.size(17.dp),
+			)
+			Spacer(Modifier.width(5.dp))
+			Text(
+				text = stringResource(R.string.duplicates_merge_button),
+				style = MaterialTheme.typography.labelLarge,
 				maxLines = 1,
 				overflow = TextOverflow.Ellipsis,
 			)

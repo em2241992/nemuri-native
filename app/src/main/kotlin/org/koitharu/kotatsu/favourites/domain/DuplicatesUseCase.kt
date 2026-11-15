@@ -4,6 +4,7 @@ import dagger.Reusable
 import org.koitharu.kotatsu.core.db.MangaDatabase
 import org.koitharu.kotatsu.core.model.isLocal
 import org.koitharu.kotatsu.core.parser.MangaRepository
+import org.koitharu.kotatsu.core.util.TitleNormalizer
 import org.koitharu.kotatsu.favourites.data.FavouriteManga
 import org.koitharu.kotatsu.favourites.data.toManga
 import org.koitharu.kotatsu.list.domain.ReadingProgress.Companion.PROGRESS_NONE
@@ -123,20 +124,29 @@ class DuplicatesUseCase @Inject constructor(
 	private fun Manga.matchesAnyOf(normalizedTitles: Set<String>): Boolean {
 		for (candidate in allTitles()) {
 			val normalized = candidate.normalizeTitle()
-			if (normalized.length < MIN_NORMALIZED_LENGTH) {
-				continue
+			if (normalized.length >= MIN_NORMALIZED_LENGTH &&
+				normalizedTitles.any { it.contains(normalized) || normalized.contains(it) }
+			) {
+				return true
 			}
-			if (normalizedTitles.any { it.contains(normalized) || normalized.contains(it) }) {
+			val cleanDedupe = TitleNormalizer.normalize(candidate).normalizeTitle()
+			if (cleanDedupe.length >= MIN_NORMALIZED_LENGTH &&
+				normalizedTitles.any { it == cleanDedupe || TitleNormalizer.fuzzyTitleSimilarity(it, cleanDedupe) >= 0.88f }
+			) {
 				return true
 			}
 		}
 		return false
 	}
 
-	private fun Manga.allTitles(): List<String> = buildList(altTitles.size + 1) {
+	private fun Manga.allTitles(): List<String> = buildList((altTitles.size + 1) * 2) {
 		add(title)
-		addAll(altTitles)
-	}.filter { it.isNotBlank() }
+		add(TitleNormalizer.normalize(title))
+		for (alt in altTitles) {
+			add(alt)
+			add(TitleNormalizer.normalize(alt))
+		}
+	}.filter { it.isNotBlank() }.distinct()
 
 	private fun String.normalizeTitle() = buildString(length) {
 		for (c in this@normalizeTitle) {

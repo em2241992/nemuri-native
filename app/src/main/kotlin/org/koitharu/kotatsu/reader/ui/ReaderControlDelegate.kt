@@ -153,6 +153,8 @@ class ReaderControlDelegate(
 
 		fun toggleScreenOrientation()
 
+		fun onUpscaleClick() {}
+
 		fun isReaderResumed(): Boolean
 	}
 }

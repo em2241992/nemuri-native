@@ -1,8 +1,12 @@
 package org.koitharu.kotatsu.reader.domain
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.BitmapRegionDecoder
 import android.graphics.Rect
 import android.net.Uri
+import android.os.Build
 import androidx.annotation.AnyThread
 import androidx.annotation.CheckResult
 import androidx.collection.LongSparseArray
@@ -38,6 +42,7 @@ import org.koitharu.kotatsu.core.network.imageproxy.ImageProxyInterceptor
 import org.koitharu.kotatsu.core.parser.CachingMangaRepository
 import org.koitharu.kotatsu.core.parser.MangaRepository
 import org.koitharu.kotatsu.core.prefs.AppSettings
+import org.koitharu.kotatsu.core.prefs.ReaderUpscalePreset
 import org.koitharu.kotatsu.core.util.FileSize
 import org.koitharu.kotatsu.core.util.MimeTypes
 import org.koitharu.kotatsu.core.util.ext.URI_SCHEME_ZIP
@@ -141,6 +146,21 @@ class PageLoader @Inject constructor(
 
 	suspend fun loadPage(page: MangaPage, force: Boolean): Uri {
 		return loadPageAsync(page, force).await()
+	}
+
+	/**
+	 * Decodes a safe, crisp viewport-centered [Bitmap] of [page] for the interactive split-screen
+	 * upscaler preview, cropping tall webtoon strips via [BitmapRegionDecoder] so they never OOM.
+	 */
+	suspend fun loadPreviewBitmap(
+		page: MangaPage,
+		viewport: UpscaleEffect.Viewport?,
+		maxSidePx: Int = 1280,
+	): Bitmap {
+		val uri = loadPage(page, force = false)
+		return runInterruptible(Dispatchers.IO) {
+			decodeViewportBitmap(uri, viewport, maxSidePx)
+		}
 	}
 
 	@CheckResult
@@ -263,11 +283,21 @@ class PageLoader @Inject constructor(
 	): Uri = semaphore.withPermit {
 		val pageUrl = getPageUrl(page)
 		check(pageUrl.isNotBlank()) { "Cannot obtain full image url for $page" }
+		val cpuPreset = if (!UpscaleEffect.isSupported && !isPrefetch && !context.isPowerSaveMode()) {
+			settings.readerUpscalePreset.takeIf { it != ReaderUpscalePreset.OFF }
+		} else {
+			null
+		}
+		val postCacheKey = cpuPreset?.let { "$pageUrl#upscale_${it.name}" }
 		if (!skipCache) {
-			cache.get(pageUrl)?.let { return it.toUri() }
+			if (postCacheKey != null) {
+				cache.get(postCacheKey)?.let { return it.toUri() }
+			} else {
+				cache.get(pageUrl)?.let { return it.toUri() }
+			}
 		}
 		val uri = pageUrl.toUri()
-		return when {
+		val rawUri = when {
 			uri.isZipUri() -> if (uri.scheme == URI_SCHEME_ZIP) {
 				uri
 			} else { // legacy uri
@@ -298,6 +328,138 @@ class PageLoader @Inject constructor(
 				}.toUri()
 			}
 		}
+		if (cpuPreset != null && postCacheKey != null) {
+			return applyCpuUpscaleFallback(rawUri, postCacheKey, cpuPreset)
+		}
+		return rawUri
+	}
+
+	private suspend fun applyCpuUpscaleFallback(
+		rawUri: Uri,
+		postCacheKey: String,
+		preset: ReaderUpscalePreset,
+	): Uri = runCatchingCancellable {
+		convertLock.withLock {
+			cache.get(postCacheKey)?.let { return@withLock it.toUri() }
+			val enhanced = runInterruptible(Dispatchers.Default) {
+				val decoded = decodeRawBitmapWithOomBounds(rawUri, maxSidePx = 2800)
+				try {
+					val processed = ReaderBitmapUpscaler.processBitmap(
+						source = decoded,
+						preset = preset,
+						availableRamBytes = context.ramAvailable,
+					)
+					if (processed === decoded) null else processed
+				} finally {
+					if (!decoded.isRecycled) {
+						decoded.recycle()
+					}
+				}
+			}
+			if (enhanced == null) {
+				rawUri
+			} else {
+				try {
+					cache.set(postCacheKey, enhanced).toUri()
+				} finally {
+					if (!enhanced.isRecycled) {
+						enhanced.recycle()
+					}
+				}
+			}
+		}
+	}.getOrDefault(rawUri)
+
+	@Blocking
+	private fun decodeRawBitmapWithOomBounds(uri: Uri, maxSidePx: Int): Bitmap {
+		val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+		openUriInputStream(uri).use { BitmapFactory.decodeStream(it, null, bounds) }
+		val w = bounds.outWidth
+		val h = bounds.outHeight
+		var sample = 1
+		while (w / sample > maxSidePx || h / sample > maxSidePx) {
+			sample *= 2
+		}
+		val opts = BitmapFactory.Options().apply {
+			inSampleSize = sample
+			inPreferredConfig = Bitmap.Config.ARGB_8888
+		}
+		return openUriInputStream(uri).use {
+			checkNotNull(BitmapFactory.decodeStream(it, null, opts)) { "Failed to decode page bitmap" }
+		}
+	}
+
+	@Blocking
+	private fun decodeViewportBitmap(
+		uri: Uri,
+		viewport: UpscaleEffect.Viewport?,
+		maxSidePx: Int,
+	): Bitmap {
+		val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+		openUriInputStream(uri).use { BitmapFactory.decodeStream(it, null, bounds) }
+		val fullW = bounds.outWidth
+		val fullH = bounds.outHeight
+		if (fullW <= 0 || fullH <= 0) {
+			return if (uri.isZipUri()) {
+				ZipFile(uri.schemeSpecificPart).use { zip ->
+					val entry = zip.getEntry(uri.fragment)
+					zip.getInputStream(entry).use {
+						BitmapDecoderCompat.decode(it, MimeTypes.getMimeTypeFromExtension(entry.name))
+					}
+				}
+			} else {
+				BitmapDecoderCompat.decode(File(requireNotNull(uri.path)))
+			}
+		}
+		// Tall webtoon strip: crop a ~4:3 window centered on the reader's live viewport Y
+		if (fullH > fullW * 2) {
+			val cropH = ((fullW * 4) / 3).coerceIn(256, fullH)
+			val centerY = (viewport?.centerY?.toInt() ?: (cropH / 2)).coerceIn(cropH / 2, fullH - cropH / 2)
+			val top = (centerY - cropH / 2).coerceIn(0, fullH - cropH)
+			val rect = Rect(0, top, fullW, (top + cropH).coerceAtMost(fullH))
+			var sample = 1
+			while (rect.width() / sample > maxSidePx || rect.height() / sample > maxSidePx) {
+				sample *= 2
+			}
+			val opts = BitmapFactory.Options().apply {
+				inSampleSize = sample
+				inPreferredConfig = Bitmap.Config.ARGB_8888
+			}
+			val cropped = runCatching {
+				openUriInputStream(uri).use { stream ->
+					val decoder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+						BitmapRegionDecoder.newInstance(stream)
+					} else {
+						@Suppress("DEPRECATION")
+						BitmapRegionDecoder.newInstance(stream, false)
+					}
+					try {
+						decoder?.decodeRegion(rect, opts)
+					} finally {
+						decoder?.recycle()
+					}
+				}
+			}.getOrNull()
+			if (cropped != null) return cropped
+		}
+		return decodeRawBitmapWithOomBounds(uri, maxSidePx)
+	}
+
+	private fun openUriInputStream(uri: Uri): java.io.InputStream = if (uri.isZipUri()) {
+		val zip = ZipFile(uri.schemeSpecificPart)
+		val entry = checkNotNull(zip.getEntry(uri.fragment)) { "Missing zip entry ${uri.fragment}" }
+		val raw = zip.getInputStream(entry)
+		object : java.io.FilterInputStream(raw) {
+			override fun close() {
+				try {
+					super.close()
+				} finally {
+					zip.close()
+				}
+			}
+		}
+	} else {
+		File(requireNotNull(uri.path) { "Invalid page uri: $uri" }).inputStream()
 	}
 
 	private fun isLowRam(): Boolean {

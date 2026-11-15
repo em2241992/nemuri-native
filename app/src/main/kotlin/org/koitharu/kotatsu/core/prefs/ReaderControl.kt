@@ -19,6 +19,7 @@ enum class ReaderControl(
 	NEXT_CHAPTER(R.string.next_chapter, R.drawable.ic_action_skip),
 	SLIDER(R.string.pages_slider, R.drawable.ic_slider),
 	PAGES_SHEET(R.string.chapters_and_pages, R.drawable.ic_grid),
+	UPSCALE(R.string.upscale_preview, R.drawable.ic_sparkles),
 	SCREEN_ROTATION(R.string.screen_orientation, R.drawable.ic_screen_rotation),
 	SAVE_PAGE(R.string.save_page, R.drawable.ic_save),
 	TIMER(R.string.automatic_scroll, R.drawable.ic_timer),
@@ -26,6 +27,6 @@ enum class ReaderControl(
 
 	companion object {
 
-		val DEFAULT: List<ReaderControl> = listOf(PREV_CHAPTER, SLIDER, NEXT_CHAPTER, PAGES_SHEET)
+		val DEFAULT: List<ReaderControl> = listOf(PREV_CHAPTER, SLIDER, NEXT_CHAPTER, PAGES_SHEET, UPSCALE)
 	}
 }
