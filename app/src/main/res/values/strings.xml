@@ -1447,4 +1447,26 @@
     <string name="upscale_split_drag_hint">Drag the cyan divider to compare Original vs live enhanced output</string>
     <string name="upscale_active_toggle">Active</string>
     <string name="upscale_sample_source_label">Preview sample</string>
+    <string name="ai_engine_settings_title">AI Engine &amp; LLM Router</string>
+    <string name="ai_engine_summary_local">On-Device .litertlm</string>
+    <string name="ai_engine_summary_ollama">Local Ollama / LAN</string>
+    <string name="ai_engine_summary_cloud">Cloud Gemini / OpenAI</string>
+    <string name="ai_master_toggle_title">Generative AI Features</string>
+    <string name="ai_master_toggle_subtitle">Enables spoiler-locked Where Was I? recaps on Manga Details</string>
+    <string name="ai_backend_section_title">LLM Execution Backend</string>
+    <string name="ai_backend_local_title">On-Device .litertlm / Nano</string>
+    <string name="ai_backend_local_subtitle">100% offline • Android AICore / MediaPipe .litertlm or local Reading Trail</string>
+    <string name="ai_backend_ollama_title">Local Ollama / LAN</string>
+    <string name="ai_backend_ollama_subtitle">Loopback 127.0.0.1:11434 or home LAN server via OkHttp</string>
+    <string name="ai_backend_cloud_title">Cloud Gemini / OpenAI</string>
+    <string name="ai_backend_cloud_subtitle">Google Gemini 2.5 Flash or OpenAI-compatible HTTPS API</string>
+    <string name="ai_pick_litertlm_button">Select .litertlm / .task Model File</string>
+    <string name="ai_clear_litertlm_button">Clear</string>
+    <string name="ai_fetch_models_button">Fetch Models</string>
+    <string name="ai_test_connection_button">Test Connection</string>
+    <string name="ai_testing_connection">Testing…</string>
+    <string name="where_was_i_title">Where Was I?</string>
+    <string name="where_was_i_spoiler_badge">Spoiler-Free • Ch. %1$s</string>
+    <string name="where_was_i_regenerate">Regenerate recap</string>
+    <string name="where_was_i_dismiss">Dismiss recap card</string>
 </resources>

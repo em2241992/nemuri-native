@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import okhttp3.OkHttpClient
 import org.koitharu.kotatsu.BuildConfig
 import org.koitharu.kotatsu.core.db.MangaDatabase
+import org.koitharu.kotatsu.core.db.dao.MangaAiRecapDao
 import org.koitharu.kotatsu.core.exceptions.resolve.CaptchaHandler
 import org.koitharu.kotatsu.core.image.AvifImageDecoder
 import org.koitharu.kotatsu.core.image.CbzFetcher
@@ -94,6 +95,11 @@ interface AppModule {
 		fun provideMangaDatabase(
 			@ApplicationContext context: Context,
 		): MangaDatabase = MangaDatabase(context)
+
+		@Provides
+		fun provideMangaAiRecapDao(
+			database: MangaDatabase,
+		): MangaAiRecapDao = database.getMangaAiRecapDao()
 
 		@Provides
 		@Singleton

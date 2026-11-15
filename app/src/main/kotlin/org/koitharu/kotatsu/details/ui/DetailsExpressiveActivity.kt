@@ -164,6 +164,12 @@ class DetailsExpressiveActivity :
 			onIncognitoClick = { openReader(isIncognitoMode = true) },
 			onForgetHistoryClick = { viewModel.removeFromHistory() },
 			onChaptersClick = { router.showChapterPagesSheet() },
+			onRegenerateRecap = { viewModel.regenerateWhereWasIRecap() },
+			onDismissRecap = { viewModel.dismissWhereWasIRecap() },
+			onReopenRecap = { viewModel.reopenWhereWasIRecap() },
+			onOpenAiSettings = {
+				org.koitharu.kotatsu.settings.ai.AiEngineSettingsSheet.show(supportFragmentManager)
+			},
 		)
 		viewBinding.composeView.setViewCompositionStrategy(
 			ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
@@ -173,6 +179,7 @@ class DetailsExpressiveActivity :
 				val density = androidx.compose.ui.platform.LocalDensity.current
 				val details by viewModel.mangaDetails.collectAsState()
 				val history by viewModel.historyInfo.collectAsState()
+				val whereWasIRecap by viewModel.whereWasIRecapState.collectAsState()
 				val loading by viewModel.isLoading.collectAsState()
 				val favs by viewModel.favouriteCategories.collectAsState()
 				val mergedSources by viewModel.mergedSources.collectAsState()
@@ -192,6 +199,7 @@ class DetailsExpressiveActivity :
 					details = details,
 					tags = tags,
 					historyInfo = history,
+					whereWasIRecapState = whereWasIRecap,
 					isLoading = loading,
 					favouriteCount = favs.size,
 					favouriteLabel = favLabel,

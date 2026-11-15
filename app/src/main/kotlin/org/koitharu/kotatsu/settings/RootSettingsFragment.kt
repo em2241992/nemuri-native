@@ -45,6 +45,7 @@ import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.settings.search.SettingsSearchMenuProvider
 import org.koitharu.kotatsu.settings.search.SettingsSearchViewModel
 import org.koitharu.kotatsu.settings.about.AboutSettingsFragment
+import org.koitharu.kotatsu.settings.ai.AiEngineSettingsFragment
 import org.koitharu.kotatsu.settings.compose.CategoryPalette
 import org.koitharu.kotatsu.settings.compose.DropSauceTheme
 import org.koitharu.kotatsu.settings.compose.PlainInfoSettingsItem
@@ -164,6 +165,15 @@ private enum class SettingsSection(
 		R.string.services, R.drawable.ic_services, "services",
 		intArrayOf(R.string.suggestions, R.string.tracking),
 		ServicesSettingsFragment::class.java,
+	),
+	AI_ENGINE(
+		R.string.ai_engine_settings_title, R.drawable.ic_sparkles, "ai_engine",
+		intArrayOf(
+			R.string.ai_engine_summary_local,
+			R.string.ai_engine_summary_ollama,
+			R.string.ai_engine_summary_cloud,
+		),
+		AiEngineSettingsFragment::class.java,
 	),
 	ABOUT(
 		R.string.about, R.drawable.ic_info_outline, "about",

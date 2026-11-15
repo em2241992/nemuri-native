@@ -100,6 +100,7 @@ import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.reader.ui.upscale.UpscalePresetGridSelector
 import org.koitharu.kotatsu.reader.ui.upscale.UpscaleSplitComparisonFrame
 import org.koitharu.kotatsu.settings.SettingsActivity
+import org.koitharu.kotatsu.settings.ai.AiEngineSettingsSheet
 import org.koitharu.kotatsu.settings.compose.DropSauceTheme
 import javax.inject.Inject
 import kotlin.math.roundToInt
@@ -148,6 +149,7 @@ class EnhanceFragment : Fragment() {
 							)
 						},
 						onOpenReaderSettings = { router.openReaderSettings() },
+						onOpenAiEngineSettings = { AiEngineSettingsSheet.show(childFragmentManager) },
 					)
 				}
 			}
@@ -191,6 +193,7 @@ private fun EnhanceHubScreen(
 	onOpenMergeSheet: (Manga) -> Unit,
 	onOpenBulkBrokenMigration: () -> Unit,
 	onOpenReaderSettings: () -> Unit,
+	onOpenAiEngineSettings: () -> Unit,
 ) {
 	val state by viewModel.state.collectAsState()
 	val nestedScroll = rememberNestedScrollInteropConnection()
@@ -255,16 +258,25 @@ private fun EnhanceHubScreen(
 						style = MaterialTheme.typography.titleMedium,
 						fontWeight = FontWeight.Bold,
 						color = Color.White,
+						modifier = Modifier.weight(1f),
 					)
+					IconButton(onClick = onOpenAiEngineSettings) {
+						Icon(
+							painter = painterResource(R.drawable.ic_sparkles),
+							contentDescription = stringResource(R.string.ai_engine_settings_title),
+							tint = NemuriCyan,
+						)
+					}
 				}
 			}
 
-			// 3-Mode Nemuri Obsidian Segmented Pill Bar (Zero purple tint, zero hard bottom border)
+			// 3-Mode Nemuri Obsidian Segmented Pill Bar + [✦] AI Router Trigger
 			EnhanceSegmentedPillBar(
 				selectedTab = state.selectedTab,
 				duplicatesCount = state.duplicatePairs.size,
 				repairCount = state.repairItems.size,
 				onSelectTab = viewModel::selectTab,
+				onOpenAiEngine = onOpenAiEngineSettings,
 			)
 
 			when (state.selectedTab) {
@@ -361,71 +373,97 @@ private fun EnhanceSegmentedPillBar(
 	duplicatesCount: Int,
 	repairCount: Int,
 	onSelectTab: (EnhanceTab) -> Unit,
+	onOpenAiEngine: () -> Unit,
 ) {
-	Surface(
-		shape = RoundedCornerShape(18.dp),
-		color = ObsidianCardSurface,
-		border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f)),
+	Row(
 		modifier = Modifier
 			.fillMaxWidth()
 			.padding(horizontal = 16.dp, vertical = 8.dp),
+		horizontalArrangement = Arrangement.spacedBy(8.dp),
+		verticalAlignment = Alignment.CenterVertically,
 	) {
-		Row(
-			modifier = Modifier
-				.fillMaxWidth()
-				.padding(4.dp),
-			horizontalArrangement = Arrangement.spacedBy(4.dp),
+		Surface(
+			shape = RoundedCornerShape(18.dp),
+			color = ObsidianCardSurface,
+			border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f)),
+			modifier = Modifier.weight(1f),
 		) {
-			EnhanceTab.entries.forEach { tab ->
-				val selected = tab == selectedTab
-				val badgeCount = when (tab) {
-					EnhanceTab.DUPLICATES -> duplicatesCount
-					EnhanceTab.REPAIR -> repairCount
-					EnhanceTab.UPSCALER -> 0
-				}
-				Surface(
-					shape = RoundedCornerShape(14.dp),
-					color = if (selected) NemuriCyan else Color.Transparent,
-					modifier = Modifier
-						.weight(1f)
-						.clip(RoundedCornerShape(14.dp))
-						.clickable { onSelectTab(tab) },
-				) {
-					Row(
-						modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
-						horizontalArrangement = Arrangement.Center,
-						verticalAlignment = Alignment.CenterVertically,
+			Row(
+				modifier = Modifier
+					.fillMaxWidth()
+					.padding(4.dp),
+				horizontalArrangement = Arrangement.spacedBy(4.dp),
+			) {
+				EnhanceTab.entries.forEach { tab ->
+					val selected = tab == selectedTab
+					val badgeCount = when (tab) {
+						EnhanceTab.DUPLICATES -> duplicatesCount
+						EnhanceTab.REPAIR -> repairCount
+						EnhanceTab.UPSCALER -> 0
+					}
+					Surface(
+						shape = RoundedCornerShape(14.dp),
+						color = if (selected) NemuriCyan else Color.Transparent,
+						modifier = Modifier
+							.weight(1f)
+							.clip(RoundedCornerShape(14.dp))
+							.clickable { onSelectTab(tab) },
 					) {
-						Text(
-							text = stringResource(tab.labelRes),
-							style = MaterialTheme.typography.labelLarge,
-							fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-							color = if (selected) NemuriDarkInk else NemuriMuted,
-							maxLines = 1,
-							overflow = TextOverflow.Ellipsis,
-						)
-						if (badgeCount > 0) {
-							Spacer(Modifier.width(6.dp))
-							Surface(
-								shape = CircleShape,
-								color = if (selected) {
-									NemuriDarkInk.copy(alpha = 0.18f)
-								} else {
-									NemuriCyan.copy(alpha = 0.18f)
-								},
-							) {
-								Text(
-									text = badgeCount.toString(),
-									style = MaterialTheme.typography.labelSmall,
-									fontSize = 10.sp,
-									fontWeight = FontWeight.Bold,
-									color = if (selected) NemuriDarkInk else NemuriCyan,
-									modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
-								)
+						Row(
+							modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+							horizontalArrangement = Arrangement.Center,
+							verticalAlignment = Alignment.CenterVertically,
+						) {
+							Text(
+								text = stringResource(tab.labelRes),
+								style = MaterialTheme.typography.labelLarge,
+								fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+								color = if (selected) NemuriDarkInk else NemuriMuted,
+								maxLines = 1,
+								overflow = TextOverflow.Ellipsis,
+							)
+							if (badgeCount > 0) {
+								Spacer(Modifier.width(6.dp))
+								Surface(
+									shape = CircleShape,
+									color = if (selected) {
+										NemuriDarkInk.copy(alpha = 0.18f)
+									} else {
+										NemuriCyan.copy(alpha = 0.18f)
+									},
+								) {
+									Text(
+										text = badgeCount.toString(),
+										style = MaterialTheme.typography.labelSmall,
+										fontSize = 10.sp,
+										fontWeight = FontWeight.Bold,
+										color = if (selected) NemuriDarkInk else NemuriCyan,
+										modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+									)
+								}
 							}
 						}
 					}
 				}
+			}
+		}
+
+		Surface(
+			shape = RoundedCornerShape(16.dp),
+			color = ObsidianCardSurface,
+			border = BorderStroke(1.dp, NemuriCyan.copy(alpha = 0.40f)),
+			modifier = Modifier
+				.size(44.dp)
+				.clip(RoundedCornerShape(16.dp))
+				.clickable(onClick = onOpenAiEngine),
+		) {
+			Box(contentAlignment = Alignment.Center) {
+				Icon(
+					painter = painterResource(R.drawable.ic_sparkles),
+					contentDescription = stringResource(R.string.ai_engine_settings_title),
+					tint = NemuriCyan,
+					modifier = Modifier.size(20.dp),
+				)
 			}
 		}
 	}

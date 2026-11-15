@@ -70,6 +70,10 @@ class DetailsExpressiveActions(
 	val onIncognitoClick: () -> Unit,
 	val onForgetHistoryClick: () -> Unit,
 	val onChaptersClick: () -> Unit,
+	val onRegenerateRecap: () -> Unit = {},
+	val onDismissRecap: () -> Unit = {},
+	val onReopenRecap: () -> Unit = {},
+	val onOpenAiSettings: () -> Unit = {},
 )
 
 @Composable
@@ -77,6 +81,7 @@ fun DetailsExpressiveScreen(
 	details: MangaDetails?,
 	tags: List<ChipsView.ChipModel>,
 	historyInfo: HistoryInfo,
+	whereWasIRecapState: WhereWasIRecapUiState = WhereWasIRecapUiState(),
 	isLoading: Boolean,
 	favouriteCount: Int,
 	favouriteLabel: String?,
@@ -190,6 +195,14 @@ fun DetailsExpressiveScreen(
 
 			Spacer(Modifier.height(8.dp))
 			ProgressCard(historyInfo = historyInfo, isLoading = isLoading, accent = accentColor)
+
+			WhereWasIRecapCard(
+				state = whereWasIRecapState,
+				onRegenerate = actions.onRegenerateRecap,
+				onDismiss = actions.onDismissRecap,
+				onReopen = actions.onReopenRecap,
+				onOpenAiSettings = actions.onOpenAiSettings,
+			)
 
 			DescriptionCard(
 				description = details.description,

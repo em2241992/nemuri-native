@@ -30,7 +30,9 @@ import org.koitharu.kotatsu.core.model.getPreferredBranch
 import org.koitharu.kotatsu.local.data.isEpubFile
 import java.io.File
 import org.koitharu.kotatsu.core.nav.MangaIntent
+import org.koitharu.kotatsu.core.ai.PluggableAiRouter
 import org.koitharu.kotatsu.core.db.MangaDatabase
+import org.koitharu.kotatsu.core.model.MangaHistory
 import org.koitharu.kotatsu.core.parser.MangaDataRepository
 import org.koitharu.kotatsu.core.parser.MangaRepository
 import org.koitharu.kotatsu.core.prefs.AppSettings
@@ -45,9 +47,11 @@ import org.koitharu.kotatsu.details.data.MergeSourcesRepository
 import org.koitharu.kotatsu.details.domain.BranchComparator
 import org.koitharu.kotatsu.details.domain.DetailsInteractor
 import org.koitharu.kotatsu.details.domain.DetailsLoadUseCase
+import org.koitharu.kotatsu.details.domain.NekoChapterCanonicalizer
 import org.koitharu.kotatsu.details.domain.ProgressUpdateUseCase
 import org.koitharu.kotatsu.details.domain.ReadingTimeUseCase
 import org.koitharu.kotatsu.details.domain.RelatedMangaUseCase
+import org.koitharu.kotatsu.details.domain.WhereWasIRecapUseCase
 import org.koitharu.kotatsu.details.ui.model.HistoryInfo
 import org.koitharu.kotatsu.details.ui.model.MangaBranch
 import org.koitharu.kotatsu.details.ui.pager.ChaptersPagesViewModel
@@ -90,6 +94,8 @@ class DetailsViewModel @Inject constructor(
 	private val database: MangaDatabase,
 	private val mangaDataRepository: MangaDataRepository,
 	private val mergeSourcesRepository: MergeSourcesRepository,
+	private val whereWasIRecapUseCase: WhereWasIRecapUseCase,
+	private val aiRouter: PluggableAiRouter,
 	mangaRepositoryFactory: MangaRepository.Factory,
 ) : ChaptersPagesViewModel(
 	settings = settings,
@@ -125,6 +131,44 @@ class DetailsViewModel @Inject constructor(
 	val mergedSources = mergeSourcesRepository.observeMergedSources(mangaId)
 		.withErrorHandling()
 		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, emptyList())
+
+	private val cachedRecap = whereWasIRecapUseCase.observeRecap(mangaId)
+		.withErrorHandling()
+		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, null)
+
+	private val isGeneratingRecap = MutableStateFlow(false)
+	private val recapErrorMessage = MutableStateFlow<String?>(null)
+	private var recapGenerationJob: Job? = null
+
+	val whereWasIRecapState: StateFlow<WhereWasIRecapUiState> = combine(
+		combine(mangaDetails, history, aiRouter.configFlow) { d, h, cfg -> Triple(d, h, cfg) },
+		cachedRecap,
+		isGeneratingRecap,
+		recapErrorMessage,
+	) { (details, hist, cfg), cached, generating, errorMsg ->
+		if (!cfg.masterAiEnabled || hist == null || details == null || details.allChapters.isEmpty()) {
+			return@combine WhereWasIRecapUiState(isVisible = false)
+		}
+		val pausedChapter = details.allChapters.findById(hist.chapterId)
+			?: return@combine WhereWasIRecapUiState(isVisible = false)
+		val fallbackNumber = NekoChapterCanonicalizer.parseChapterNumber(
+			mangaTitle = details.toManga().title,
+			chapterTitle = pausedChapter.title,
+			chapterNumber = pausedChapter.number,
+		)
+		val matchingRecap = cached?.takeIf { it.upToChapterId == hist.chapterId }
+		WhereWasIRecapUiState(
+			isVisible = true,
+			isGenerating = generating,
+			recap = matchingRecap,
+			fallbackChapterNumber = fallbackNumber,
+			errorMessage = errorMsg,
+		)
+	}.stateIn(
+		scope = viewModelScope + Dispatchers.Default,
+		started = SharingStarted.Eagerly,
+		initialValue = WhereWasIRecapUiState(),
+	)
 
 	val isStatsAvailable = statsRepository.observeHasStats(mangaId)
 		.withErrorHandling()
@@ -247,6 +291,70 @@ class DetailsViewModel @Inject constructor(
 			.onEach { reload() }
 			.withErrorHandling()
 			.launchIn(viewModelScope + Dispatchers.Default)
+
+		// Automatically load cached Room recap (0ms) or generate spoiler-locked recap when history is present.
+		combine(
+			mangaDetails.filter { it?.allChapters?.isNotEmpty() == true },
+			selectedBranch,
+			history,
+			aiRouter.configFlow.map { it.masterAiEnabled to it.backendMode }.distinctUntilChanged(),
+		) { details, branch, hist, (aiEnabled, mode) ->
+			RecapAutoTrigger(details, branch, hist?.takeIf { aiEnabled }, mode.id)
+		}
+			.distinctUntilChangedBy { t -> "${t.details?.id}:${t.branch}:${t.history?.chapterId}:${t.modeId}" }
+			.onEach { trigger ->
+				val d = trigger.details
+				val h = trigger.history
+				if (d != null && h != null) {
+					triggerRecapLoadOrGenerate(d, trigger.branch, h, forceRegenerate = false)
+				}
+			}
+			.withErrorHandling()
+			.launchIn(viewModelScope + Dispatchers.Default)
+	}
+
+	fun regenerateWhereWasIRecap() {
+		val d = mangaDetails.value ?: return
+		val h = history.value ?: return
+		triggerRecapLoadOrGenerate(d, selectedBranch.value, h, forceRegenerate = true)
+	}
+
+	fun dismissWhereWasIRecap() {
+		launchJob(Dispatchers.IO) {
+			whereWasIRecapUseCase.setDismissed(mangaId, true)
+		}
+	}
+
+	fun reopenWhereWasIRecap() {
+		launchJob(Dispatchers.IO) {
+			whereWasIRecapUseCase.setDismissed(mangaId, false)
+		}
+	}
+
+	private fun triggerRecapLoadOrGenerate(
+		details: MangaDetails,
+		branch: String?,
+		hist: MangaHistory,
+		forceRegenerate: Boolean,
+	) {
+		recapGenerationJob?.cancel()
+		recapGenerationJob = launchJob(Dispatchers.IO) {
+			recapErrorMessage.value = null
+			isGeneratingRecap.value = true
+			try {
+				val res = whereWasIRecapUseCase.getOrGenerateRecap(
+					details = details,
+					selectedBranch = branch,
+					history = hist,
+					forceRegenerate = forceRegenerate,
+				)
+				res.onFailure { err ->
+					recapErrorMessage.value = err.message ?: "Recap generation failed"
+				}
+			} finally {
+				isGeneratingRecap.value = false
+			}
+		}
 	}
 
 	override fun reload() {
@@ -357,6 +465,13 @@ class DetailsViewModel @Inject constructor(
 		return scrobbler
 	}
 }
+
+private data class RecapAutoTrigger(
+	val details: MangaDetails?,
+	val branch: String?,
+	val history: MangaHistory?,
+	val modeId: String,
+)
 
 private fun MangaDetails?.hasRenderableSnapshot(): Boolean {
 	return this != null && (isLoaded || description != null || allChapters.isNotEmpty())

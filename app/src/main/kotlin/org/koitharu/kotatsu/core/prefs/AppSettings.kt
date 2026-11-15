@@ -1290,6 +1290,66 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		return result
 	}
 
+	var isAiMasterEnabled: Boolean
+		get() = prefs.getBoolean(KEY_AI_MASTER_ENABLED, true)
+		set(value) = prefs.edit { putBoolean(KEY_AI_MASTER_ENABLED, value) }
+
+	var aiBackendMode: String
+		get() = prefs.getString(KEY_AI_BACKEND_MODE, "ON_DEVICE_LOCAL") ?: "ON_DEVICE_LOCAL"
+		set(value) = prefs.edit { putString(KEY_AI_BACKEND_MODE, value) }
+
+	var aiLocalModelUri: String?
+		get() = prefs.getString(KEY_AI_LOCAL_MODEL_URI, null)?.takeIf { it.isNotBlank() }
+		set(value) = prefs.edit {
+			if (value.isNullOrBlank()) remove(KEY_AI_LOCAL_MODEL_URI)
+			else putString(KEY_AI_LOCAL_MODEL_URI, value)
+		}
+
+	var aiLocalModelName: String?
+		get() = prefs.getString(KEY_AI_LOCAL_MODEL_NAME, null)?.takeIf { it.isNotBlank() }
+		set(value) = prefs.edit {
+			if (value.isNullOrBlank()) remove(KEY_AI_LOCAL_MODEL_NAME)
+			else putString(KEY_AI_LOCAL_MODEL_NAME, value)
+		}
+
+	var aiOllamaBaseUrl: String
+		get() = prefs.getString(KEY_AI_OLLAMA_BASE_URL, "http://127.0.0.1:11434")
+			?.takeIf { it.isNotBlank() }
+			?: "http://127.0.0.1:11434"
+		set(value) = prefs.edit { putString(KEY_AI_OLLAMA_BASE_URL, value.trim()) }
+
+	var aiOllamaModelId: String
+		get() = prefs.getString(KEY_AI_OLLAMA_MODEL_ID, "llama3.2:3b")
+			?.takeIf { it.isNotBlank() }
+			?: "llama3.2:3b"
+		set(value) = prefs.edit { putString(KEY_AI_OLLAMA_MODEL_ID, value.trim()) }
+
+	var aiOllamaCachedModels: Set<String>
+		get() = prefs.getStringSet(KEY_AI_OLLAMA_CACHED_MODELS, emptySet()).orEmpty()
+		set(value) = prefs.edit { putStringSet(KEY_AI_OLLAMA_CACHED_MODELS, value) }
+
+	var aiCloudProvider: String
+		get() = prefs.getString(KEY_AI_CLOUD_PROVIDER, "GOOGLE_GEMINI") ?: "GOOGLE_GEMINI"
+		set(value) = prefs.edit { putString(KEY_AI_CLOUD_PROVIDER, value) }
+
+	var aiGeminiModelId: String
+		get() = prefs.getString(KEY_AI_GEMINI_MODEL_ID, "gemini-2.5-flash")
+			?.takeIf { it.isNotBlank() }
+			?: "gemini-2.5-flash"
+		set(value) = prefs.edit { putString(KEY_AI_GEMINI_MODEL_ID, value.trim()) }
+
+	var aiOpenAiBaseUrl: String
+		get() = prefs.getString(KEY_AI_OPENAI_BASE_URL, "https://api.openai.com/v1")
+			?.takeIf { it.isNotBlank() }
+			?: "https://api.openai.com/v1"
+		set(value) = prefs.edit { putString(KEY_AI_OPENAI_BASE_URL, value.trim()) }
+
+	var aiOpenAiModelId: String
+		get() = prefs.getString(KEY_AI_OPENAI_MODEL_ID, "gpt-4o-mini")
+			?.takeIf { it.isNotBlank() }
+			?: "gpt-4o-mini"
+		set(value) = prefs.edit { putString(KEY_AI_OPENAI_MODEL_ID, value.trim()) }
+
 	fun subscribe(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
 		prefs.registerOnSharedPreferenceChangeListener(listener)
 	}
@@ -1586,6 +1646,17 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		const val KEY_DISCORD_TOKEN = "discord_token"
 		const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
 		const val KEY_ONBOARDING_INSTALL_ID = "onboarding_install_id"
+		const val KEY_AI_MASTER_ENABLED = "nemuri_ai_master_enabled"
+		const val KEY_AI_BACKEND_MODE = "nemuri_ai_backend_mode"
+		const val KEY_AI_LOCAL_MODEL_URI = "nemuri_ai_local_model_uri"
+		const val KEY_AI_LOCAL_MODEL_NAME = "nemuri_ai_local_model_name"
+		const val KEY_AI_OLLAMA_BASE_URL = "nemuri_ai_ollama_base_url"
+		const val KEY_AI_OLLAMA_MODEL_ID = "nemuri_ai_ollama_model_id"
+		const val KEY_AI_OLLAMA_CACHED_MODELS = "nemuri_ai_ollama_cached_models"
+		const val KEY_AI_CLOUD_PROVIDER = "nemuri_ai_cloud_provider"
+		const val KEY_AI_GEMINI_MODEL_ID = "nemuri_ai_gemini_model_id"
+		const val KEY_AI_OPENAI_BASE_URL = "nemuri_ai_openai_base_url"
+		const val KEY_AI_OPENAI_MODEL_ID = "nemuri_ai_openai_model_id"
 
 		/**
 		 * Keys that must never leave the device: credentials, app-lock state and per-install ids.
@@ -1603,6 +1674,8 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 			KEY_INCOGNITO_MODE,
 			KEY_ONBOARDING_COMPLETED,
 			KEY_ONBOARDING_INSTALL_ID,
+			KEY_AI_LOCAL_MODEL_URI,
+			KEY_AI_LOCAL_MODEL_NAME,
 		)
 
 		/**
@@ -1638,6 +1711,9 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 			KEY_APP_VERSION,
 			KEY_UPDATE_PROMPT_DISMISSED,
 			KEY_PRELOAD_POLICIES_RESET,
+			KEY_AI_OLLAMA_BASE_URL,
+			KEY_AI_OLLAMA_MODEL_ID,
+			KEY_AI_OLLAMA_CACHED_MODELS,
 		)
 
 		fun isSyncableKey(key: String): Boolean = key !in SENSITIVE_BACKUP_KEYS &&

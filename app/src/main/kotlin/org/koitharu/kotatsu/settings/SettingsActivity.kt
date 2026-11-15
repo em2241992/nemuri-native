@@ -186,6 +186,7 @@ class SettingsActivity :
 			AppRouter.ACTION_PROXY -> ProxySettingsFragment()
 			AppRouter.ACTION_MANAGE_DOWNLOADS -> DownloadsSettingsFragment()
 			ACTION_BROKEN_SOURCES -> org.koitharu.kotatsu.settings.sources.migration.BrokenSourcesMigrationFragment()
+			ACTION_AI_ENGINE -> org.koitharu.kotatsu.settings.ai.AiEngineSettingsFragment()
 			AppRouter.ACTION_SOURCE -> SourceSettingsFragment.newInstance(
 				MangaSource(intent.getStringExtra(AppRouter.KEY_SOURCE)),
 				intent.getBooleanExtra(AppRouter.KEY_SCROLL_TO_LANGUAGE, false),
@@ -240,5 +241,6 @@ class SettingsActivity :
 		private const val HOST_ABOUT = "about"
 		const val ARG_PREF_KEY = "pref_key"
 		const val ACTION_BROKEN_SOURCES = "org.koitharu.kotatsu.settings.ACTION_BROKEN_SOURCES"
+		const val ACTION_AI_ENGINE = "org.koitharu.kotatsu.settings.ACTION_AI_ENGINE"
 	}
 }
